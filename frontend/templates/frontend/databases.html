@@ -1,0 +1,368 @@
+{% extends 'frontend/base-template.html' %}
+{% load i18n static %}
+
+{% block breadcrumbs %}
+
+{% if database %}
+<li class="breadcrumb-item"><a href="{% url 'frontend:databases' %}">{% trans "Databases" %}</a></li>
+<li class="breadcrumb-item active" aria-current="page">{{database.name}}</li>
+{% else %}
+<li class="breadcrumb-item active"><a href="#">{% trans "Databases" %}</a></li>
+{% endif %}
+
+{% endblock %}
+
+{% block page_content %}
+<div class="page-content">
+    <div class="container-fluid">
+        {% if not database %}
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="page-title-box">
+                    <div class="row justify-content-end">
+                        <div class="col-auto align-self-center">
+                            <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                                data-bs-target="#new-database-modal">
+                                <i class="fas fa-plus me-2"></i>{% trans "Add database" %}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row py-2" id="databases">
+
+        </div>
+        {% else %}
+        <!-- Create nested accordions for the schemas, tables and columns -->
+        <div class="accordion" id="main-accordion">
+            {% for schema in database.databaseschema_set.all %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="{{ database.id }}-{{ database.name }}-{{schema.name}}-item-header">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#{{ database.id }}-{{ database.name }}-{{schema.name}}-item-collapse"
+                        aria-controls="#{{ database.id }}-{{ database.name }}-{{schema.name}}-item-collapse">
+                        <input type="checkbox" class="form-check-input mx-2 select-all-tables" data-schema-id="{{ schema.id }}" /> {{ schema.name }}
+                    </button>
+                </h2>
+                <div class="accordion-collapse collapse show"
+                    aria-labelledby="{{ database.id }}-{{ database.name }}-{{schema.name}}-item-header"
+                    data-bs-parent="#main-accordion"
+                    id="{{ database.id }}-{{ database.name }}-{{schema.name}}-item-collapse">
+                    <div class="accordion-body">
+                        <div class="accordion"
+                            id="{{ database.id }}-{{ database.name }}-{{schema.name}}-item-accordion">
+                            {% for table in schema.table_set.all %}
+                            <div class="accordion-item">
+                                <h2 class="accordion-header"
+                                    id="{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-header">
+                                    <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                                        data-bs-target="#{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-collapse"
+                                        aria-controls="{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-collapse"><input type="checkbox" class="form-check-input mx-2 select-table" data-table-id="{{ table.id }}" data-schema-id="{{ schema.id }}" /> {{ table.name }}</button>
+                                </h2>
+                                <div class="accordion-collapse collapse show"
+                                    aria-labelledby="{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-header"
+                                    id="{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-collapse"
+                                    data-bs-parent="#{{ database.id }}-{{ database.name }}-{{schema.name}}-item-accordion">
+                                    <div class="accordion-body">
+                                        <table class="table table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>{% trans "Column name" %}</th>
+                                                    <th>{% trans "Data type" %}</th>
+                                                    <th>{% trans "Character max." %}</th>
+                                                    <th>{% trans "Datetime precision" %}</th>
+                                                    <th>{% trans "Numeric precision" %}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for column in table.column_set.all %}
+                                                <tr>
+                                                    <td>{{ column.name }}</td>
+                                                    <td>{{ column.data_type }}</td>
+                                                    <td>{{ column.character_maximum_length }}</td>
+                                                    <td>{{ column.datetime_precision }}</td>
+                                                    <td>{{ column.numeric_precision }}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block modals %}
+<div class="modal" id="new-database-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "New Database" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="dbms-input" class="form-label">{% trans "Database Management System (DBMS)*" %}</label>
+                    <select class="form-select" id="dbms-input">
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="dbms-version-input">{% trans "DBMS Version*" %}</label>
+                    <input type="text" class="form-control" id="dbms-version-input" value="18.2">
+                </div>
+
+                <div class="mb-3">
+                    <label for="instance-name-input">{% trans "Instance name" %}</label>
+                    <input type="text" id="instance-name-input" class="form-control" value="SQLEXPRESS">
+                </div>
+
+                <div class="mb-3">
+                    <label for="database-name">{% trans "Database Name*" %}</label>
+                    <input type="text" class="form-control" id="database-name" value="BikeStores2">
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="database-host">{% trans "Database host*" %}</label>
+                        <input type="text" class="form-control" id="database-host" value="localhost">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="database-port">{% trans "Database port*" %}</label>
+                        <input type="number" name="" id="database-port" class="form-control" value="1433">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="database-username">{% trans "Database username*" %}</label>
+                        <input type="text" class="form-control" id="database-username" value="sa">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="database-password">{% trans "Database password" %}</label>
+                        <input type="password" name="" id="database-password" class="form-control"
+                            value="groupesia@2022">
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submit-new-database-form">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function () {
+        console.log("Doc is ready...")
+        // get the databases from the API
+
+        $.ajax({
+            type: "GET",
+            url: `http://${location.host}${API_URL}/ferdolt/dbms/`,
+            success: function (data) {
+                state.databaseManagementSystems = data
+                init()
+            },
+            error: function (data) {
+                // get the stuff from local storage instead
+            }
+        });
+
+        $.ajax({
+            type: "GET",
+            url: `http://${location.host}${API_URL}/ferdolt/databases/`,
+            success: function (data) {
+                state.databases = data
+                displayDatabases()
+            }
+        })
+    })
+
+    $(".select-all-tables").change(function() {
+        schemaId = $(this).attr('data-schema-id')
+        const schema = $(this);
+        const checked = $(this).is(':checked');
+
+        $(`.select-table[data-schema-id=${schemaId}]`).each(function() {
+            $(this).prop('checked', checked)
+        })
+    })
+
+    $('.select-table').change(function() {
+        schemaId = $(this).attr("data-schema-id");
+        numberOfTables = 0;
+        numberofSelectedTables = 0;
+
+        $(`.select-table[data-schema-id=${schemaId}]`).each( function() {
+            numberOfTables++;
+
+            numberofSelectedTables += $(this).prop('checked') ? 1 : 0;
+        } )
+
+        $(`.select-all-tables[data-schema-id=${schemaId}]`).prop('checked', numberOfTables === numberofSelectedTables )
+    })
+
+    function init() {
+        for (let dbms of state.databaseManagementSystems) {
+            let option = createElement("option", [], { value: dbms['id'] })
+            option.textContent = dbms["name"]
+
+            $("#dbms-input").append(option)
+        }
+
+        displayDatabases()
+    }
+
+    function displayDatabases() {
+        console.log("In displayDatabases(): ")
+        console.log(state.databases)
+
+        for (let database of state.databases) {
+            console.log("Creating card...")
+            let card = createElementsRecursively(
+                {
+                    tag: "div",
+                    classes: ["card", "mx-1"],
+                    attributes: { style: "width: 18rem;", id: `database-${database['id']}` },
+                    elements: [
+                        {
+                            tag: "div",
+                            classes: ["card-body"],
+                            attributes: {},
+                            elements: [
+                                {
+                                    tag: "h5",
+                                    classes: ["card-title"],
+                                    attributes: {}
+                                },
+                                {
+                                    tag: "h6",
+                                    classes: ["card-subtitle", "mb-2", "text-muted"]
+                                },
+                                {
+                                    tag: "p",
+                                    classes: ["card-text", "database-host"]
+                                },
+                                {
+                                    tag: "p",
+                                    classes: ["card-text", "database-port"]
+                                },
+                                {
+                                    tag: "a",
+                                    classes: ["btn", "btn-primary", "database-detail-link"],
+                                    attributes: { href: `${location.pathname}${database['id']}` }
+                                },
+                            ]
+                        }
+                    ]
+                }
+            )
+
+            $(card).find(".card-title").text(database["name"])
+
+            $(card).find('.card-subtitle').text(`${database['version']['dbms_object']['name']} ${database['version']['version_number']}`)
+            $('.card')
+
+            $(card).find('.database-host').text(`Host: ${database['host']}`)
+            $(card).find('.database-port').text(`Port: ${database['port']}`)
+
+            $(card).find('.database-detail-link').text("Details")
+            $("#databases").append(card)
+        }
+    }
+
+    $("#dbms-input").change(function () {
+        let value = $(this).val()
+        console.log("DBMS input changed!")
+
+        // get the option with this value
+        let option = $(this).children(`option[value=${value}]`).first()
+
+        console.log(option)
+
+        if (option !== null) {
+            let text = option.text()
+
+            console.log("The option's text content: " + text)
+
+            // checking if an SQL server option has been chosen
+            let regex = /sql\s*server/gmi
+
+            // add a field for instance name if an SQL Server option ws chosen
+            if (regex.test(text)) {
+                $("#instance-name-input").parent().removeClass("d-none")
+            } else {
+                $("#instance-name-input").parent().addClass("d-none")
+            }
+        }
+    })
+
+    $("#submit-new-database-form").click(
+        function () {
+            submitNewDatabaseForm()
+        }
+    )
+
+    function submitNewDatabaseForm() {
+        console.log("Submitting new database")
+        formData = {
+            version: {
+                version_number: $("#dbms-version-input").val(),
+                dbms: $('#dbms-input').val(),
+                dbms_object: {
+                    name: $(`#dbms-input option[value=${$("#dbms-input").val()}]`).text() ,
+                }
+            },
+            instance_name: $("#instance-name-input").val(),
+            name: $("#database-name").val(),
+            host: $("#database-host").val(),
+            port: $("#database-port").val(),
+            username: $("#database-username").val(),
+            password: $("#database-password").val()
+        }
+
+        console.log("Data to submit")
+        console.log(JSON.stringify(formData))
+
+        $.ajax({
+            type: 'POST',
+            contentType: "application/json",
+            url: `http://${location.host}/ferdolt/databases/`,
+            data: JSON.stringify(formData),
+            headers: {
+                "X-CSRFTOKEN": getCookie("csrf_token")
+            },
+            success: function (data) {
+
+            },
+            error: function (data) {
+                console.log("error message: ")
+                console.log(data.responseText)
+
+                if (data.status == 400 || data.status == 500) {
+                    console.log( JSON.stringify(formData) );
+                    console.log(formData);
+                }
+            }
+        })
+    
+    }
+</script>
+{% endblock %}

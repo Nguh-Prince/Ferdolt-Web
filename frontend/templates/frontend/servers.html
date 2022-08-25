@@ -1,0 +1,196 @@
+{% extends 'frontend/base-template.html' %}
+{% load i18n static %}
+
+{% block breadcrumbs %}
+
+{% if server %}
+<li class="breadcrumb-item">
+    <a href="{% url 'frontend:servers' %}">{% trans 'Servers' %}</a>
+</li>
+<li class="breadcrumb-item active">
+    {{ server.name }}
+</li>
+{% else %}
+<li class="breadcrumb-item active">
+    {% trans 'Servers' %}
+</li>
+{% endif %}
+
+{% endblock %}
+
+{% block page_content %}
+<div class="page-content">
+    <div class="container-fluid">
+        {% if not server %}
+        .<div class="row">
+            <div class="col-sm-12">
+                <div class="page-title-box">
+                    <div class="row justify-content-end">
+                        <div class="col-auto align-self-center">
+                            <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                                data-bs-target="#new-server-modal">
+                                <i class="fas fa-plus me-2"></i>{% trans "Add server" %}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row py-2" id="servers">
+            {% for server in servers %}
+            <div class="card mx-1" style="width: 18rem;" id="server-{{ server.id }}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ server.name }}</h5>
+                    <h6 class="card-subtitle">
+                        Server ID: {{ server.server_id }}
+                    </h6>
+                    <p class="card-text">
+                        Location: {{ server.location }}
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block modals %}
+<div class="modal" id="new-server-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "New Server" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="server-name-input" class="form-label">
+                        {% trans "Server name" %}
+                    </label>
+                    <input type="text" class="form-control" id="server-name-input" value="Local">
+                </div>
+
+                <div class="mb-3 row">
+                    <div class="col-md-8">
+                        <label for="server-address-input" class="form-label">{% trans "Hostname" %}</label>
+                        <input type="text" class="form-control" id="server-address-input"
+                            placeholder="{% trans 'e.g. 192.168.100.25 or www.somesite.com' %}" value="localhost">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="server-port-input" class="form-label">{% trans "Port" %}</label>
+                        <input id="server-port-input" type="number" class="form-control"
+                            placeholder="{% trans 'e.g. 8000' %}" value="8000">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="server-location-input" class="form-label">{% trans "Location" %}</label>
+                    <textarea id="server-location-input" rows="3" class="form-control">Yaounde, Cameroon</textarea>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submit-new-database-form" onclick="submitNewServer()">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function submitNewServer() {
+        formData = {
+            name: $("#server-name-input").val(),
+            address: $("#server-address-input").val(),
+            port: $("#server-port-input").val(),
+            location: $("#server-location-input").val()
+        }
+
+        $.ajax({
+            type: 'POST',
+            url: `http://${location.host}/${API_BASE_URL}ferdolt/servers/`,
+            data: formData,
+            // contentType: 'application/json',
+            success: function (data) {
+                console.log("Gotten the servers from the API")
+                state.servers.push(data)
+                displayServer(data)
+            },
+            error: function (data) {
+                console.log(formData)
+                console.log(data.responseJSON)
+            }
+        })
+
+        function displayServers() {
+            console.log("In displayServers(): ")
+            console.log(state.servers)
+
+            for (let server of state.servers) {
+                displayServer(server)
+            }
+        }
+
+        function displayServer(server, parentContainerSelector="#servers") {
+            let card = createElementsRecursively(
+                {
+                    tag: "div",
+                    classes: ["card", "mx-1"],
+                    attributes: { style: "width: 18rem;", id: `server-${server['id']}` },
+                    elements: [
+                        {
+                            tag: "div",
+                            classes: ["card-body"],
+                            attributes: {},
+                            elements: [
+                                {
+                                    tag: "h5",
+                                    classes: ["card-title", "py-2"],
+                                    attributes: {}
+                                },
+                                {
+                                    tag: "h6",
+                                    classes: ["card-subtitle", "mb-2", "text-muted"]
+                                },
+                                {
+                                    tag: "p",
+                                    classes: ["card-text", "server-host"]
+                                },
+                                {
+                                    tag: "p",
+                                    classes: ["card-text", "server-port"]
+                                },
+                                {
+                                    tag: "a",
+                                    classes: ["btn", "btn-primary", "server-detail-link"],
+                                    attributes: { href: `${location.pathname}${server['id']}` }
+                                },
+                            ]
+                        }
+                    ]
+                }
+            )
+
+            $(card).find(".card-title").text(server["name"])
+
+            $(card).find('.card-subtitle').text(`${server['version']['dbms_object']['name']} ${server['version']['version_number']}`)
+            $('.card')
+
+            $(card).find('.server-host').text(`Host: ${server['host']}`)
+            $(card).find('.server-port').text(`Port: ${server['port']}`)
+
+            $(card).find('.server-detail-link').text("Details")
+
+            $(parentContainerSelector).append( card )
+        }
+
+    }
+</script>
+{% endblock %}

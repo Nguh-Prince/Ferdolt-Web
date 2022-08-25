@@ -1,0 +1,338 @@
+{% extends 'frontend/base-template.html' %}
+{% load i18n static %}
+
+{% block extra_styles %}
+<link rel="stylesheet" href="{% static 'frontend/assets/css/dataTables.bootstrap5.min.css' %}">
+<script src="{% static 'frontend/assets/js/jquery.dataTables.min.js' %}"></script>
+<script src="{% static 'frontend/assets/js/dataTables.bootstrap5.min.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+{% if table %}
+<li class="breadcrumb-item">
+    <a href="{% url 'frontend:tables' %}">{% trans "Tables" %}</a>
+</li>
+<li class="breadcrumb-item active" aria-current="page">
+    {{ table.name }}
+</li>
+{% else %}
+<li class="breadcrumb-item active">
+    {% trans "Tables" %}
+</li>
+{% endif %}
+{% endblock %}
+
+{% block page_content %}
+<div class="page-content">
+    {% if not table %}
+    <div class="container">
+        <table class="table table-striped" id="tables">
+            <thead>
+                <tr>
+                    <th>{% trans "DBMS" %}</th>
+                    <th>{% trans "Database" %}</th>
+                    <th>{% trans "Schema" %}</th>
+                    <th>{% trans "Table" %}</th>
+                    <th>{% trans "Nb columns" %}</th>
+                    <th>{% trans "Action" %}</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for table in tables %}
+                <tr>
+                    <td>{{ table.schema.database.dbms_version }}</td>
+                    <td>{{ table.schema.database.name }}</td>
+                    <td>{{ table.schema.name }}</td>
+                    <td>{{ table.name }}</td>
+                    <td>{{ table.column_set.count }}</td>
+                    <td>
+                        <!-- <button class="btn btn-danger">{% trans "Delete" %}</button> -->
+                        <a class="btn btn-primary" href="{% url 'frontend:tables' table.id %}">{% trans "Details" %}</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="page-title-box">
+                    <div class="row justify-content-end">
+                        <div class="col-auto align-self-center">
+                            <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                                data-bs-target="#new-records-modal">
+                                <i class="fas fa-plus me-2"></i>{% trans "Add record(s)" %}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <table class="table table-striped" id="records">
+            <thead>
+                <tr>
+                    {% for column in table.column_set.all %}
+                    <th>
+                        {{ column.name }}
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for row in data %}
+                <tr>
+                    {% for column in row.keys %}
+                    <td>
+                        {{ row.column }}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block modals %}
+{% if table %}
+<div class="modal" id="new-records-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "Add record(s)" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            {% for column in table.column_set.all %}
+                            <th>{{ column.name }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr>
+                            {% for column in table.column_set.all %}
+                            <td>
+                                <input type="text" id="{{ column.name }}-input" name="{{ column.name }}" class="form-control" />
+                            </td>
+                            {% endfor %}
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="row justify-content-end my-3">
+                    <div class="col-auto align-self-center">
+                        <button class="btn btn-outline-secondary btn-sm add-file"
+                            onclick="addRowsToNewRecordsModalTable(1)">
+                            <i class="fas fa-plus me-2"></i>{% trans "Add row" %}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-outline-primary" onclick="submitNewRows()">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    var TABLE_ID = {{ table.id }}
+
+    $(document).ready(function () {
+        // $('#tables').DataTable();
+
+        $.ajax({
+            type: "GET",
+            url: `http://${location.host}/ferdolt/tables/${TABLE_ID}`,
+            success: function (data) {
+                console.log("Gotten response from tables API")
+                state.table = data
+                init()
+                getRecords()
+            },
+            error: function (data) {
+
+            }
+        })
+    })
+
+    function init() {
+        // set the header columns in the #records table
+
+        let selectors = [
+            $("#new-records-modal").find('thead'),
+            $("#records").find('thead')
+        ]
+
+        let row = createElement('tr', [], {})
+
+        // $(row).append(createElementsRecursively({
+        //     tag: "th",
+        //     classes: [],
+        //     attributes: {},
+        //     elements: [
+        //         {
+        //             tag: "i",
+        //             classes: [],
+        //             attributes: { "data-feather": "trash" }
+        //         }
+        //     ]
+        // }))
+
+        feather.replace()
+
+        for (let column of state.table.columns) {
+            let header = createElement("th", [], {})
+            header.textContent = column.name
+
+            $(row).append(header)
+        }
+
+        for (let selector of selectors) {
+            selector.html('')
+            selector.append($(row).clone())
+        }
+
+        if (state.table.columns.length > 6) {
+            $("#new-records-modal .modal-dialog").addClass("modal-fullscreen")
+        }
+    }
+
+    function addRowsToNewRecordsModalTable(numberOfRows) {
+        for (let i = 0; i < numberOfRows; i++) {
+            let row = createElement('tr', [], {})
+
+            // $(row).append(createElementsRecursively({
+            //     tag: "th",
+            //     classes: [],
+            //     attributes: {},
+            //     elements: [
+            //         {
+            //             tag: "i",
+            //             classes: [],
+            //             attributes: { "data-feather": "trash" }
+            //         }
+            //     ]
+            // }))
+            
+            for (let column of state.table.columns) {
+                let cell = createElementsRecursively({
+                    tag: 'td',
+                    classes: [],
+                    attributes: {},
+                    elements: [
+                        {
+                            tag: 'input',
+                            classes: ['form-control'],
+                            attributes: { type: 'text', name: `${column.name}` }
+                        }
+                    ]
+                })
+
+                row.append(cell)
+            }
+
+            $("#new-records-modal .modal-body tbody").append(row)
+        }
+    }
+
+    function getRecords() {
+        console.log("Calling getRecords()")
+        $.ajax({
+            type: "GET",
+            url: `http://${location.host}/ferdolt/tables/${TABLE_ID}/records/`,
+            success: function (data) {
+                state.tableRecords = data
+                console.log("In ajax request, the records are: ")
+                console.log(data)
+
+                console.log("In ajax request, the records in state are: ")
+                console.log(state.tableRecords)
+
+                displayRecords()
+            },
+            error: function (data) {
+                console.log(data.responseText)
+            }
+        })
+    }
+
+    function displayRecords() {
+        $("#records").find("tbody").html('')
+
+        console.log("In displayRecords() records gotten from the server")
+        console.log(state.tableRecords)
+
+        for (let record of state.tableRecords) {
+            let row = createElement('tr', [], {})
+            console.log(record)
+
+            // $(row).append(createElementsRecursively({
+            //     tag: "th",
+            //     classes: [],
+            //     attributes: {},
+            //     elements: [
+            //         {
+            //             tag: "i",
+            //             classes: [],
+            //             attributes: { "data-feather": "trash" }
+            //         }
+            //     ]
+            // }))
+
+            for (let column of state.table.columns) {
+                let cell = createElement('td', [], {})
+                cell.textContent = record[column.name]
+                row.appendChild(cell)
+            }
+
+            $("#records tbody").append(row)
+        }
+    }
+
+    function getTableColumnNames() {
+        array = []
+
+        for (let column of state.table.columns) {
+            array.push(column['name'])
+        }
+
+        return array
+    }
+
+    function submitNewRows() {
+        rows = []
+
+        $("#new-records-modal tbody tr").each( function() {
+            object = {}
+
+            $(this).find('input').each( function() {
+                let inputName = $(this).attr('name').toLowerCase()
+
+                if ( getTableColumnNames().includes( inputName ) ) {
+                    object[inputName] = $(this).val()
+                }
+            } )
+
+            rows.push(object)
+        } )
+
+        console.log(rows)
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,6 @@
+environment/
+env/
+linux-env/
+.env
+logs/
+files/

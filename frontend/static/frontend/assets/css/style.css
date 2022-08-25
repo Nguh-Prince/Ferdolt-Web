@@ -1,0 +1,387 @@
+/* Theme Name: 
+   Author: 
+   Version: 1.0.0
+   Created: 
+   File Description:Main CSS file of the template
+*/
+
+body {
+    background-color: #ffffff;
+    color: #505458;
+    font-family: 'Nunito', sans-serif;
+    overflow-x: hidden !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: 'Nunito', sans-serif;
+}
+
+a {
+    text-decoration: none !important;
+    outline: none;
+}
+
+p {
+    font-size: 15px;
+    line-height: 1.8;
+}
+
+.font-12{
+	font-size: 12px;
+}
+
+.font-13{
+	font-size: 13px;
+}
+
+.font-14{
+	font-size: 14px;
+}
+
+.font-15{
+	font-size: 15px;
+}
+
+.font-16{
+	font-size: 16px;
+}
+
+.font-18{
+	font-size: 18px;
+}
+
+.font-20{
+	font-size: 20px;
+}
+
+.font-24{
+	font-size: 24px;
+}
+
+
+
+.bg-soft-light{
+	background-color: #fdfdfd;
+}
+
+.bg-light {
+    background-color: #eaf0f7!important;
+}
+.bg-dark {
+    background-color: #0d213a!important;
+}
+
+.bg-white {
+    background-color: #ffffff!important;
+}
+
+.text-custom{
+    color: #506ee4 !important;
+}
+
+.text-primary{
+    color: #506ee4 !important;
+}
+
+.text-secondary{
+    color: #e2e2f1 !important;
+}
+
+.text-success{
+    color: #1ecab8 !important;
+}
+
+.text-danger{
+    color: #f93b7a !important;
+}
+
+.text-info{
+    color: #00bcd4 !important;
+}
+
+.text-warning{
+    color: #fbb624 !important;
+}
+
+.text-dark{
+    color: #0d213a !important;
+}
+
+.text-muted{
+	color: #95aac9 !important;
+}
+
+.text-dark-alt{
+	color: #5d5b6f !important;
+}
+
+
+.btn {
+    padding: 8px 20px;
+    border: 1px solid;
+    font-size: 13px;
+    transition: all 0.5s;
+    font-weight: 700;
+    letter-spacing: 1px;
+    box-shadow: none !important;
+}
+
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 12px;
+}
+
+.btn-round {
+    border-radius: 30px;
+}
+
+.btn-custom {
+    color: #ffffff;
+    background-color: #506ee4;
+    border: none;
+}
+
+.btn-custom:hover,
+.btn-custom:focus,
+.btn-custom:active,
+.btn-custom.active,
+.btn-custom.focus{
+    outline: none;
+    text-decoration: none;
+    color: #ffffff;
+}
+
+
+
+.btn-custom-white {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-bottom: 3px solid #e0e0e0;
+}
+
+.btn-custom-white:hover,
+.btn-custom-white:focus,
+.btn-custom-white:active,
+.btn-custom-white.active,
+.btn-custom-white.focus {
+    outline: none;
+    background-color: #ededed;
+    border-color: #ededed;
+    border-bottom-color: #d9d9d9;
+    color: #5d5b6f;
+    text-decoration: none;
+}
+
+
+
+.section {
+    padding-top: 80px;
+    padding-bottom: 80px;
+    position: relative;
+}
+
+.section-sm {
+    padding-top: 60px;
+    padding-bottom: 60px;
+    position: relative;
+}
+
+.section-title{
+	font-weight: 700;
+	color: #0d213a;
+}
+
+/**********************
+	Navbar
+***********************/
+.navbar{
+  padding: 8px;
+}
+.navbar-nav .nav-item{
+  margin: 0 8px;
+}
+
+.navbar-nav .nav-item .nav-link{
+	color: #aeb3c7 !important;
+	font-weight: 600;
+  font-size: 14px;
+}
+
+
+
+.bg-home{
+  background-image: url('../images/auth-bg.png');
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  background-size: cover;
+  background-position: 50% -130px;
+  background-repeat: no-repeat;
+
+}
+.home-text{
+	padding: 100px 0
+}
+.mark-text{
+  background-color: #e4d25052;
+}
+.home-text h5{
+  background-color: #e3e6ef;
+  padding: 2px 8px;
+  display: inline-block;
+  font-size: 12px;
+  border-radius: 15px;
+  box-shadow: 0px 0px 3px 0.25px #dc3545;
+  border: 2px solid #fff;
+}
+
+.home-text h1{
+	color: #050506;
+  font-weight: 700;
+  margin:10px 0 20px;
+  font-size: 40px;
+}
+.home-text p {
+	font-size: 15px;
+	color: #6b6b77;
+	font-weight: 500;
+	margin-bottom: 30px;
+}
+
+.lang_logo {
+    position: absolute;
+    bottom: -60px;
+    z-index: 10;
+    width: auto;
+    left: 0;
+    right: 0;
+}
+
+.banner{
+	background-color: #ffffff;
+	padding: 20px;
+	border-radius: 100px;
+	border:5px double #dee6f1;
+	box-shadow: 0px 0px 0px 0.25px #dee6f1;
+}
+.shadow-inset{
+  box-shadow: 0px 0px 1px 5.25px #f6f8fb;
+}
+
+
+.banner img{
+	height: 46px;
+}
+
+.demo-box {
+    padding: 20px 0 30px 0;
+    text-align: center;
+    position: relative;
+}
+.demo-box a {
+    border: 8px solid #ffffff;
+    display: block;
+    transition: all 400ms ease-in-out;
+    box-shadow: 0 1px 50px rgba(153, 153, 153, 0.35);
+}
+
+.demo-box img {
+    width: 100%;
+    height: auto;
+    position: relative;
+    top: 0;
+}
+.demo-box h4 {
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-top: 24px;
+    font-size: 16px;
+}
+.features-content i {
+    display: inline-block;
+    margin: 12px 0;
+    font-size: 46px;    
+}
+
+.features-content i.one{
+    color: #007bff;
+}
+.features-content i.two{
+    color: #007bff;
+}
+.features-content i.three{
+    color: #007bff;
+}
+
+.features-content h5{
+	font-weight: 700;
+}
+
+/*CTA*/
+
+.bg-cta{
+  background-color: #0d213a;
+}
+
+/*Ribbon*/
+
+.ribbon {
+  position: absolute;
+  right: -5px; top: 16px;
+  z-index: 1;
+  overflow: hidden;
+  width: 75px; height: 75px;
+  text-align: right;
+}
+.ribbon span {
+  font-size: 10px;
+  font-weight: bold;
+  color: #FFF;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 20px;
+  transform: rotate(45deg);
+  -webkit-transform: rotate(45deg);
+  width: 100px;
+  display: block;
+  background: #ff5da0;
+  background: linear-gradient(#ff5da0 0%, #ff5da0 100%);
+  position: absolute;
+  top: 19px; right: -21px;
+}
+.ribbon span::before {
+  content: "";
+  position: absolute; left: 0px; top: 100%;
+  z-index: -1;
+  border-left: 3px solid #ff5da0;
+  border-right: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-top: 3px solid #ff5da0;
+}
+.ribbon span::after {
+  content: "";
+  position: absolute; right: 0px; top: 100%;
+  z-index: -1;
+  border-left: 3px solid transparent;
+  border-right: 3px solid #ff5da0;
+  border-bottom: 3px solid transparent;
+  border-top: 3px solid #ff5da0;
+}
+
+
+
+
+
+
+
+
+@media (max-width: 414px) {
+    .lang_logo{
+    position: relative;
+  }
+}

@@ -1,0 +1,27 @@
+{% extends 'frontend/base-template.html' %}
+{% load i18n static %}
+
+{% block page_content %}
+<div class="page-content">
+    {% if not extraction %}
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="page-title-box">
+                    <div class="row justify-content-end">
+                        <div class="col-auto align-self-center">
+                            <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                                data-bs-target="#new-database-modal">
+                                <i class="fas fa-plus me-2"></i>{% trans "Extract now" %}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row py-2" id="extractions"></div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
