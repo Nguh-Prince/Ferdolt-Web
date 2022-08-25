@@ -124,6 +124,48 @@ class ServerSerializer(serializers.ModelSerializer):
         model = models.Server
         fields = ( "name", "address", "port", "location" )
 
+class TableRecordsSerializer(serializers.Serializer):
+    database = serializers.CharField(max_length=150)
+    schema = serializers.CharField(max_length=150)
+    table = serializers.CharField(max_length=150)
+
+    def validate_database(self, value):
+        query = models.Database.objects.filter(name=value)
+
+        if not query.exists():
+            raise serializers.ValidationError( _("No database exists with name %(name)s " % { 'name': value }) )
+        
+        database = query.first()
+
+        connection = get_database_connection(query.first())
+
+        if not connection:
+            raise serializers.ValidationError( _("Error connecting to the %(database)s database" % {'database': database.__str__() }) )
+        else:
+            connection.close()
+
+        return database
+
+    
+    def validate(self, attrs):
+        database = attrs.get("database")
+
+        try:
+            attrs['schema'] = database.databaseschema_set.get(name=attrs['schema'])
+            attrs['table'] = attrs['schema'].table_set.get(name=attrs['table'])
+
+        except models.DatabaseSchema.DoesNotExist as schema_exception:
+            raise serializers.ValidationError( _("The %(schema_name)s schema does not exist in the %(database_name)s database" 
+            % { 'schema_name': attrs['schema'], 'database_name': database.name } ) )
+        except models.Table.DoesNotExist as table_exception:
+            raise serializers.ValidationError( _("The %(table_name)s table does not exist in the %(schema_name)s schema of the %(database_name)s database" 
+            % { 'schema_name': attrs['schema'], 'database_name': database.name, 'table_name': attrs['table'] } ) )
+
+        return super().validate(attrs)
+
+
+    
+
 class TableInsertSerializer(serializers.Serializer):
     # serializer for DML operations on the table
     database = serializers.CharField(max_length=150)
@@ -149,12 +191,36 @@ class TableInsertSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         database = attrs.get("database")
+        validation_errors = []
 
         try:
             attrs['schema'] = database.databaseschema_set.get(name=attrs['schema'])
             attrs['table'] = attrs['schema'].table_set.get(name=attrs['table'])
 
             attrs['atomic'] = 'atomic' in attrs and attrs['atomic']
+
+            table_columns = set([ f['name'] for f in attrs['table'].column_set.values("name") ])
+            table_primary_key_columns =  [ f['name'] for f in attrs['table'].column_set.filter(columnconstraint__is_primary_key=True).values("name") ]
+
+            for i in range( len( attrs['data'] ) ):
+                if not isinstance( attrs['data'][i], dict ):
+                    validation_errors.append(
+                        serializers.ValidationError( _("Invalid type. Expected a dictionary on item %(index)d of the list, got a %(type)s instead" 
+                    % { 'index': i+1, 'type': type( attrs['data'][i] ) }) )
+                    )
+            
+                columns_in_common = table_columns & attrs['data'][i].keys()
+                attrs['columns_in_common'] = columns_in_common
+
+                # at least one key in the dictionary must correspond to a column in the target table
+                if not columns_in_common:
+                    validation_errors.append(
+                        serializers.ValidationError( _("At least one of the keys in the dictionary must be in %(set)s set" 
+                        % { 'set': str(columns_in_common) }) )
+                    )
+            
+            if validation_errors:
+                raise serializers.ValidationError(validation_errors)
 
         except models.DatabaseSchema.DoesNotExist as schema_exception:
             raise serializers.ValidationError( _("The %(schema_name)s schema does not exist in the %(database_name)s database" 
@@ -169,7 +235,45 @@ class TableUpdateSerializer(TableInsertSerializer):
     reference_columns = serializers.ListField(allow_empty=True, child=serializers.CharField()) 
     # these are the columns to use for the WHERE clause in the update, if empty the primary key columns will be used instead
     def validate(self, attrs):
-        breakpoint()
+        database = attrs.get("database")
+        validation_errors = []
+
+        try:
+            attrs['schema'] = database.databaseschema_set.get(name=attrs['schema'])
+            attrs['table'] = attrs['schema'].table_set.get(name=attrs['table'])
+
+            attrs['atomic'] = 'atomic' in attrs and attrs['atomic']
+
+            table_columns = set([ f['name'] for f in attrs['table'].column_set.values("name") ])
+            table_primary_key_columns =  [ f['name'] for f in attrs['table'].column_set.filter(columnconstraint__is_primary_key=True).values("name") ]
+
+            for i in range( len( attrs['data'] ) ):
+                if not isinstance( attrs['data'][i], dict ):
+                    validation_errors.append(
+                        serializers.ValidationError( _("Invalid type. Expected a dictionary on item %(index)d of the list, got a %(type)s instead" 
+                    % { 'index': i+1, 'type': type( attrs['data'][i] ) }) )
+                    )
+            
+                columns_in_common = table_columns & attrs['data'][i].keys()
+                attrs['columns_in_common'] = columns_in_common
+
+                # at least one key in the dictionary must correspond to a column in the target table
+                if not columns_in_common:
+                    validation_errors.append(
+                        serializers.ValidationError( _("At least one of the keys in the dictionary must be in %(set)s set" 
+                        % { 'set': str(columns_in_common) }) )
+                    )
+            
+            if validation_errors:
+                raise serializers.ValidationError(validation_errors)
+
+        except models.DatabaseSchema.DoesNotExist as schema_exception:
+            raise serializers.ValidationError( _("The %(schema_name)s schema does not exist in the %(database_name)s database" 
+            % { 'schema_name': attrs['schema'], 'database_name': database.name } ) )
+        except models.Table.DoesNotExist as table_exception:
+            raise serializers.ValidationError( _("The %(table_name)s table does not exist in the %(schema_name)s schema of the %(database_name)s database" 
+            % { 'schema_name': attrs['schema'], 'database_name': database.name, 'table_name': attrs['table'] } ) )
+
         return super().validate(attrs)
 
 class TableDeleteSerializer(serializers.Serializer):

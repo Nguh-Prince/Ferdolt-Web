@@ -76,7 +76,7 @@ class TableViewSet(viewsets.ModelViewSet):
         return Response(data=records)
 
     @action(detail=False, methods=['POST'], permission_classes=[permissions.DummyPermission])
-    def insert(self, request, *args, **kwargs):
+    def insert_data(self, request, *args, **kwargs):
         time = timezone.now()
 
         serializer = serializers.TableInsertSerializer(data=request.data)
@@ -240,6 +240,28 @@ class TableViewSet(viewsets.ModelViewSet):
             return Response( data = _("An error occured, the changes will not be committed"), status=status.HTTP_400_BAD_REQUEST )
 
         return Response( records_deleted )
+
+    @action(detail=False, methods=['GET'], permission_classes=[permissions.DummyPermission])
+    def read_data(self, request, *args, **kwargs):
+        serializer = serializers.TableRecordsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        database = serializer.validated_data.pop('database')
+        table = serializer.validated_data.pop('table')
+
+        connection = get_database_connection(database)
+        cursor = connection.cursor()
+
+        query = f"SELECT * FROM {table.schema.name}.{table.name}"
+
+        results = []
+        rows = cursor.execute(query)
+        columns = [ column[0] for column in cursor.description ]
+
+        for row in rows:
+            results.append( dict( zip(columns, row) ) )
+
+        return Response(data=results)
 
 class ColumnViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.ColumnSerializer
