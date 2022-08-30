@@ -61,6 +61,8 @@ class DatabaseSchema(models.Model):
 class Table(models.Model):
     schema = models.ForeignKey(DatabaseSchema, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
+    level = models.IntegerField(default=0) # this level is the order in which items should be added to tables to avoid integrity errors 
+    # starts with 0 (these are the parent tables with no external foreign keys)
 
     class Meta:
         verbose_name = _("Table")
