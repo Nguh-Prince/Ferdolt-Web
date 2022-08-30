@@ -73,11 +73,15 @@ TEMPLATES = [
     },
 ]
 
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.BrowsableAPIRenderer',
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework_xml.renderers.XMLRenderer',
+    ]
+}
+
 WSGI_APPLICATION = 'ferdolt_web.wsgi.application'
-
-
-# Database
-# https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 
 DATABASES = {
     'default': {
@@ -119,6 +123,10 @@ MEDIA_ROOT = "files"
 MEDIA_URL = "media/"
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+PATH_TO_KITCHEN = r"C:\pdi-ce-9.3.0.0-428\data-integration\Kitchen.bat"
+
+PATH_TO_PENTAHO_DATABASE = os.path.join( BASE_DIR, 'pentaho_files', 'BikeStores', 'data', 'database.sqlite' )
 
 LOGGING = {
     'version': 1,
@@ -179,6 +187,10 @@ LOGGING = {
             'propagate': False,
         },
         'django.request': {
+            'handlers': ['console', 'error_file', 'debug_file', 'info_file', 'critical_file', 'warning_file'],
+            'level': 'DEBUG'
+        },
+        '': {
             'handlers': ['console', 'error_file', 'debug_file', 'info_file', 'critical_file', 'warning_file'],
             'level': 'DEBUG'
         }

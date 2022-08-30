@@ -1,6 +1,10 @@
 {% extends 'frontend/base-template.html' %}
 {% load i18n static %}
 
+{% block extra_styles %}
+<link href="{% static 'frontend/plugins/daterangepicker/daterangepicker.css' %}" rel="stylesheet" type="text/css" />
+{% endblock %}
+
 {% block page_content %}
 <div class="page-content">
     {% if not extraction %}
@@ -11,7 +15,7 @@
                     <div class="row justify-content-end">
                         <div class="col-auto align-self-center">
                             <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
-                                data-bs-target="#new-database-modal">
+                                data-bs-target="#new-extraction-modal">
                                 <i class="fas fa-plus me-2"></i>{% trans "Extract now" %}
                             </button>
                         </div>
@@ -20,8 +24,184 @@
             </div>
         </div>
 
-        <div class="row py-2" id="extractions"></div>
+        <div class="row py-2" id="extractions">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>{% trans "Date & time" %}</th>
+                        <th>{% trans "File" %}</th>
+                        <th>{% trans "File size (bytes)" %}</th>
+                        <th>{% trans "Databases" %}</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for extraction in extractions %}
+                    <tr>
+                        <td>{{ extraction.time_made }}</td>
+                        <td>
+                            <a target="_blank" href="{{ extraction.file.file.url }}">{{ extraction.file.file.name }}</a>
+                        </td>
+                        <td>{{ extraction.file.file.size }}</td>
+                        <td>
+                            <ul>
+                                {% for database in extraction.extractiondatabase_set.all %}
+                                <li>{{ database.database.name }} on {{ database.database.host }}:{{ database.database.port }}</li>
+                                {% endfor %}
+                            </ul>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block modals %}
+<div class="modal" id="new-extraction-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "New Extraction" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="new-extraction-start-time" class="form-label"
+                        title="{% trans 'Get records from the database that have been created or modified since this time' %}">
+                        {% trans "Extraction start time" %}
+                    </label>
+                    <input type="text" id="new-extraction-start-time-display" class="form-control">
+                    <input type="datetime" id="new-extraction-start-time" class="d-none">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="new-extraction-target-databases">{% trans "Databases" %}</label>
+                    <select class="form-select" multiple id="new-extraction-target-databases">
+                        <option value="">DB 1 on localhost:12000</option>
+                        <option value="">DB 2 on localhost:4599</option>
+                        <option value="">DB 2 on 192.168.19.25:5432</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="submitNewExtraction()" 
+                id="submit-new-extraction-form">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'frontend/assets/js/moment.js' %}"></script>
+<script src="{% static 'frontend/plugins/daterangepicker/daterangepicker.js' %}"></script>
+
+<script>
+    $(function () {
+        $("label[for='new-extraction-start-time'], #new-extraction-start-time-display").daterangepicker({
+            singleDatePicker: true,
+            timePicker: true,
+            showDropdowns: true,
+            minYear: 2022,
+            maxYear: 2030,
+            startDate: moment().startOf('hour'),
+            timePicker24Hour: true,
+            showSecond: true,
+            showMilliSecond: true,
+            locale: {
+                format: 'YYYY-MM-DD HH:mm:ss'
+            }
+        }, function (start, end, label) {
+            let datetime = start.format('YYYY-MM-DD HH:mm:ss')
+            console.log(`Datetime has been picked, value picked: ${datetime}`)
+
+            $("#new-extraction-start-time").val(datetime)
+        });
+    });
+
+    $(document).ready(function () {
+        // get the databases from the API
+        $.ajax({
+            type: "GET",
+            url: `http://${location.host}${API_URL}/ferdolt/databases/`,
+            success: function (data) {
+                state.databases = data
+                $("#new-extraction-target-databases").html('')
+
+                for (let database of data) {
+                    let option = createElement("option", [], { value: database.id })
+                    $(option).text(`${database.name} on ${database.host}:${database.port}`)
+                    $("#new-extraction-target-databases").append(option)
+                }
+            },
+            error: function (data) {
+
+            }
+        })
+    })
+
+    function submitNewExtraction() {
+        databaseIDsChosen = $("#new-extraction-target-databases").val()
+        
+        console.log(databaseIDsChosen)
+
+        databasesChosen = []
+
+        if (databaseIDsChosen) {
+            for (let database of state.databases) {
+                if (databaseIDsChosen.includes( `${database['id']}` ) ) {
+                    databasesChosen.push(database)
+                }
+            }
+
+            formData = {
+                start_time: $("new-extraction-start-time").val(),
+                databases: databasesChosen
+            }
+
+            console.log(formData)
+
+            // formData['start_time'] = formData['start_time'] ? formData['start_time'] : null
+
+            $.ajax({
+                type: "POST",
+                url: `http://${location.host}${API_URL}/ferdolt/flux/extractions/`,
+                contentType: "application/json",
+                data: JSON.stringify(formData),
+                headers: {
+                    "X-CSRFTOKEN": getCookie("csrftoken")
+                },
+                success: function(data) {
+                    displayMessage("Extraction completed successfully", ['alert-success', 'alert-dismissible'])
+                    console.log(formData)
+
+                    $('.modal').modal('hide');
+                },
+                error: function(data) {
+                    console.log("Error: " + data.responseText)
+                    console.log("Input data: " )
+                    console.log(formData)
+                    console.log("Stringified input data: " + JSON.stringify(formData))
+
+                    if (data.status == 500) {
+                        displayMessage("An error occured on the server")
+                    }
+
+                    if (data.status == 400) {
+                        displayMessage("Your data is incorrect")
+                    }
+                }
+            })
+        
+        } else {
+            alert( gettext("No database has been selected, select one or more databases and try again") )
+        }
+    }
+</script>
 {% endblock %}

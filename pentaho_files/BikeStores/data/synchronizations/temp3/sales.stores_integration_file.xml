@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Rows>
+<Row><store_id>1</store_id> <store_name>Santa Cruz Bikes</store_name> <phone>(831) 476-4321</phone> <email>santacruz@bikes.shop</email> <street>3700 Portola Drive</street> <city>Santa Cruz</city> <state>CA</state> <zip_code>95060</zip_code> <tracking_id>75EUZMP7AFF4SS8RJRWU202208091440160000000002</tracking_id> <last_updated>2022-08-09 14:40:16.753</last_updated></Row>
+<Row><store_id>2</store_id> <store_name>Baldwin Bikes</store_name> <phone>(516) 379-8888</phone> <email>baldwin@bikes.shop</email> <street>4200 Chestnut Lane</street> <city>Baldwin</city> <state>NY</state> <zip_code>11432</zip_code> <tracking_id>75EUZMP7AFF4SS8RJRWU202208091440160000000003</tracking_id> <last_updated>2022-08-09 14:40:16.753</last_updated></Row>
+<Row><store_id>3</store_id> <store_name>Rowlett Bikes</store_name> <phone>(972) 530-5555</phone> <email>rowlett@bikes.shop</email> <street>8000 Fairway Avenue</street> <city>Rowlett</city> <state>TX</state> <zip_code>75088</zip_code> <tracking_id>75EUZMP7AFF4SS8RJRWU202208091440160000000004</tracking_id> <last_updated>2022-08-09 14:40:16.753</last_updated></Row>
+</Rows>

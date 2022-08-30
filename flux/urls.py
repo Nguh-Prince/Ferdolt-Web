@@ -9,5 +9,7 @@ class NestedDefaultRouter(NestedRouterMixin, routers.DefaultRouter):
 router = NestedDefaultRouter()
 
 extraction_routes = router.register("extractions", views.ExtractionViewSet, basename="extractions")
+synchronization_routes = router.register("synchronizations", views.SynchronizationViewSet, basename="synchronizations")
+file_routes = router.register("files", views.FileViewSet, basename="files")
 
 urlpatterns = router.urls

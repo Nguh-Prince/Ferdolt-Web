@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Rows>
+<Row><brand_id>1</brand_id> <brand_name>Electra</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208101138060000000001</tracking_id> <last_updated>2022-08-10 11:38:06.303</last_updated></Row>
+<Row><brand_id>2</brand_id> <brand_name>Haro</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208101138060000000001</tracking_id> <last_updated>2022-08-10 11:38:06.303</last_updated></Row>
+<Row><brand_id>3</brand_id> <brand_name>Heller</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208101138060000000001</tracking_id> <last_updated>2022-08-10 11:38:06.303</last_updated></Row>
+<Row><brand_id>4</brand_id> <brand_name>Pure Cycles</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208101138060000000001</tracking_id> <last_updated>2022-08-10 11:38:06.303</last_updated></Row>
+<Row><brand_id>5</brand_id> <brand_name>Ritchey</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208101138060000000001</tracking_id> <last_updated>2022-08-10 11:38:06.303</last_updated></Row>
+<Row><brand_id>6</brand_id> <brand_name>Strider</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208101138060000000001</tracking_id> <last_updated>2022-08-10 11:38:06.303</last_updated></Row>
+<Row><brand_id>7</brand_id> <brand_name>Sun Bicycles</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208101138060000000001</tracking_id> <last_updated>2022-08-10 11:38:06.303</last_updated></Row>
+<Row><brand_id>8</brand_id> <brand_name>Surly</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208101138060000000001</tracking_id> <last_updated>2022-08-10 11:38:06.303</last_updated></Row>
+<Row><brand_id>9</brand_id> <brand_name>Trek</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208101138060000000001</tracking_id> <last_updated>2022-08-10 11:38:06.303</last_updated></Row>
+<Row><brand_id>11</brand_id> <brand_name>Chanel Dior</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208141925210000000024</tracking_id> <last_updated>2022-08-14 19:25:21.120</last_updated></Row>
+<Row><brand_id>13</brand_id> <brand_name>Hermes</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208141926510000000025</tracking_id> <last_updated>2022-08-14 19:26:51.167</last_updated></Row>
+<Row><brand_id>15</brand_id> <brand_name>Louis Vuitton</brand_name> <tracking_id>75EUZMP7AFF4SS8RJRWU202208141926510000000026</tracking_id> <last_updated>2022-08-14 19:26:51.167</last_updated></Row>
+</Rows>

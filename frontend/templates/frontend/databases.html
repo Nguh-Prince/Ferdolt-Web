@@ -39,32 +39,33 @@
         <div class="accordion" id="main-accordion">
             {% for schema in database.databaseschema_set.all %}
             <div class="accordion-item">
-                <h2 class="accordion-header" id="{{ database.id }}-{{ database.name }}-{{schema.name}}-item-header">
+                <h2 class="accordion-header" id="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-header">
                     <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                        data-bs-target="#{{ database.id }}-{{ database.name }}-{{schema.name}}-item-collapse"
-                        aria-controls="#{{ database.id }}-{{ database.name }}-{{schema.name}}-item-collapse">
-                        <input type="checkbox" class="form-check-input mx-2 select-all-tables" data-schema-id="{{ schema.id }}" /> {{ schema.name }}
+                        data-bs-target="#{{ database.name }}-{{ database.id }}-{{schema.name}}-item-collapse"
+                        aria-controls="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-collapse">
+                        <input type="checkbox" class="form-check-input mx-2 select-all-tables"
+                            data-schema-id="{{ schema.id }}" /> {{ schema.name }}
                     </button>
                 </h2>
                 <div class="accordion-collapse collapse show"
-                    aria-labelledby="{{ database.id }}-{{ database.name }}-{{schema.name}}-item-header"
-                    data-bs-parent="#main-accordion"
-                    id="{{ database.id }}-{{ database.name }}-{{schema.name}}-item-collapse">
+                    aria-labelledby="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-header"
+                    id="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-collapse">
                     <div class="accordion-body">
                         <div class="accordion"
-                            id="{{ database.id }}-{{ database.name }}-{{schema.name}}-item-accordion">
+                            id="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-accordion">
                             {% for table in schema.table_set.all %}
                             <div class="accordion-item">
                                 <h2 class="accordion-header"
-                                    id="{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-header">
+                                    id="{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-header">
                                     <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                                        data-bs-target="#{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-collapse"
-                                        aria-controls="{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-collapse"><input type="checkbox" class="form-check-input mx-2 select-table" data-table-id="{{ table.id }}" data-schema-id="{{ schema.id }}" /> {{ table.name }}</button>
+                                        data-bs-target="#{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-collapse"
+                                        aria-controls="{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-collapse"><input
+                                            type="checkbox" class="form-check-input mx-2 select-table"
+                                            data-table-id="{{ table.id }}" data-schema-id="{{ schema.id }}" /> {{ table.name }}</button>
                                 </h2>
-                                <div class="accordion-collapse collapse show"
-                                    aria-labelledby="{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-header"
-                                    id="{{ database.id }}-{{ database.name }}-{{schema.name}}-{{ table.name }}-item-collapse"
-                                    data-bs-parent="#{{ database.id }}-{{ database.name }}-{{schema.name}}-item-accordion">
+                                <div class="accordion-collapse collapse"
+                                    aria-labelledby="{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-header"
+                                    id="{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-collapse">
                                     <div class="accordion-body">
                                         <table class="table table-striped">
                                             <thead>
@@ -188,6 +189,7 @@
         $.ajax({
             type: "GET",
             url: `http://${location.host}${API_URL}/ferdolt/databases/`,
+            contentType: 'application/json',
             success: function (data) {
                 state.databases = data
                 displayDatabases()
@@ -195,28 +197,28 @@
         })
     })
 
-    $(".select-all-tables").change(function() {
+    $(".select-all-tables").change(function () {
         schemaId = $(this).attr('data-schema-id')
         const schema = $(this);
         const checked = $(this).is(':checked');
 
-        $(`.select-table[data-schema-id=${schemaId}]`).each(function() {
+        $(`.select-table[data-schema-id=${schemaId}]`).each(function () {
             $(this).prop('checked', checked)
         })
     })
 
-    $('.select-table').change(function() {
+    $('.select-table').change(function () {
         schemaId = $(this).attr("data-schema-id");
         numberOfTables = 0;
         numberofSelectedTables = 0;
 
-        $(`.select-table[data-schema-id=${schemaId}]`).each( function() {
+        $(`.select-table[data-schema-id=${schemaId}]`).each(function () {
             numberOfTables++;
 
             numberofSelectedTables += $(this).prop('checked') ? 1 : 0;
-        } )
+        })
 
-        $(`.select-all-tables[data-schema-id=${schemaId}]`).prop('checked', numberOfTables === numberofSelectedTables )
+        $(`.select-all-tables[data-schema-id=${schemaId}]`).prop('checked', numberOfTables === numberofSelectedTables)
     })
 
     function init() {
@@ -235,57 +237,61 @@
         console.log(state.databases)
 
         for (let database of state.databases) {
-            console.log("Creating card...")
-            let card = createElementsRecursively(
-                {
-                    tag: "div",
-                    classes: ["card", "mx-1"],
-                    attributes: { style: "width: 18rem;", id: `database-${database['id']}` },
-                    elements: [
-                        {
-                            tag: "div",
-                            classes: ["card-body"],
-                            attributes: {},
-                            elements: [
-                                {
-                                    tag: "h5",
-                                    classes: ["card-title"],
-                                    attributes: {}
-                                },
-                                {
-                                    tag: "h6",
-                                    classes: ["card-subtitle", "mb-2", "text-muted"]
-                                },
-                                {
-                                    tag: "p",
-                                    classes: ["card-text", "database-host"]
-                                },
-                                {
-                                    tag: "p",
-                                    classes: ["card-text", "database-port"]
-                                },
-                                {
-                                    tag: "a",
-                                    classes: ["btn", "btn-primary", "database-detail-link"],
-                                    attributes: { href: `${location.pathname}${database['id']}` }
-                                },
-                            ]
-                        }
-                    ]
-                }
-            )
-
-            $(card).find(".card-title").text(database["name"])
-
-            $(card).find('.card-subtitle').text(`${database['version']['dbms_object']['name']} ${database['version']['version_number']}`)
-            $('.card')
-
-            $(card).find('.database-host').text(`Host: ${database['host']}`)
-            $(card).find('.database-port').text(`Port: ${database['port']}`)
-
-            $(card).find('.database-detail-link').text("Details")
-            $("#databases").append(card)
+            displayDatabase(database)
         }
+    }
+
+    function displayDatabase(databaseObject, containerSelector="#container") {
+        console.log("Creating card...")
+        let card = createElementsRecursively(
+            {
+                tag: "div",
+                classes: ["card", "mx-1"],
+                attributes: { style: "width: 18rem;", id: `database-${database['id']}` },
+                elements: [
+                    {
+                        tag: "div",
+                        classes: ["card-body"],
+                        attributes: {},
+                        elements: [
+                            {
+                                tag: "h5",
+                                classes: ["card-title"],
+                                attributes: {}
+                            },
+                            {
+                                tag: "h6",
+                                classes: ["card-subtitle", "mb-2", "text-muted"]
+                            },
+                            {
+                                tag: "p",
+                                classes: ["card-text", "database-host"]
+                            },
+                            {
+                                tag: "p",
+                                classes: ["card-text", "database-port"]
+                            },
+                            {
+                                tag: "a",
+                                classes: ["btn", "btn-primary", "database-detail-link"],
+                                attributes: { href: `${location.pathname}${database['id']}` }
+                            },
+                        ]
+                    }
+                ]
+            }
+        )
+
+        $(card).find(".card-title").text(database["name"])
+
+        $(card).find('.card-subtitle').text(`${database['version']['dbms_object']['name']} ${database['version']['version_number']}`)
+        $('.card')
+
+        $(card).find('.database-host').text(`Host: ${database['host']}`)
+        $(card).find('.database-port').text(`Port: ${database['port']}`)
+
+        $(card).find('.database-detail-link').text("Details")
+        $(containerSelector).append(card)
     }
 
     $("#dbms-input").change(function () {
@@ -327,7 +333,7 @@
                 version_number: $("#dbms-version-input").val(),
                 dbms: $('#dbms-input').val(),
                 dbms_object: {
-                    name: $(`#dbms-input option[value=${$("#dbms-input").val()}]`).text() ,
+                    name: $(`#dbms-input option[value=${$("#dbms-input").val()}]`).text(),
                 }
             },
             instance_name: $("#instance-name-input").val(),
@@ -344,25 +350,34 @@
         $.ajax({
             type: 'POST',
             contentType: "application/json",
-            url: `http://${location.host}/ferdolt/databases/`,
+            url: `http://${location.host}${API_URL}/ferdolt/databases/`,
             data: JSON.stringify(formData),
             headers: {
                 "X-CSRFTOKEN": getCookie("csrf_token")
             },
             success: function (data) {
+                let flag = false;
 
+                for (let server of state.databases) {
+                    if (server.id == data.id)
+                        flag = true;
+                }
+
+                if (!flag) {
+
+                }
             },
             error: function (data) {
                 console.log("error message: ")
                 console.log(data.responseText)
 
                 if (data.status == 400 || data.status == 500) {
-                    console.log( JSON.stringify(formData) );
+                    console.log(JSON.stringify(formData));
                     console.log(formData);
                 }
             }
         })
-    
+
     }
 </script>
 {% endblock %}

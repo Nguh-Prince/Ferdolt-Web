@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Rows>
+<Row><brand_id>1</brand_id> <brand_name>Electra</brand_name> <last_updated>2022-08-09 14:40:14.397</last_updated></Row>
+<Row><brand_id>2</brand_id> <brand_name>Haro</brand_name> <last_updated>2022-08-09 14:40:14.407</last_updated></Row>
+<Row><brand_id>3</brand_id> <brand_name>Heller</brand_name> <last_updated>2022-08-09 14:40:14.407</last_updated></Row>
+<Row><brand_id>4</brand_id> <brand_name>Pure Cycles</brand_name> <last_updated>2022-08-09 14:40:14.407</last_updated></Row>
+<Row><brand_id>5</brand_id> <brand_name>Ritchey</brand_name> <last_updated>2022-08-09 14:40:14.407</last_updated></Row>
+<Row><brand_id>6</brand_id> <brand_name>Strider</brand_name> <last_updated>2022-08-09 14:40:14.410</last_updated></Row>
+<Row><brand_id>7</brand_id> <brand_name>Sun Bicycles</brand_name> <last_updated>2022-08-09 14:40:14.410</last_updated></Row>
+<Row><brand_id>8</brand_id> <brand_name>Surly</brand_name> <last_updated>2022-08-09 14:40:14.410</last_updated></Row>
+<Row><brand_id>9</brand_id> <brand_name>Trek</brand_name> <last_updated>2022-08-09 14:40:14.410</last_updated></Row>
+<Row><brand_id>11</brand_id> <brand_name>Chanel</brand_name> <last_updated>2022-08-09 14:50:49.007</last_updated></Row>
+<Row><brand_id>12</brand_id> <brand_name>Dolce &amp; Gabbana</brand_name> <last_updated>2022-08-09 14:50:49.007</last_updated></Row>
+</Rows>

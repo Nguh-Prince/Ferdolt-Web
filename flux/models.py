@@ -3,7 +3,7 @@ from django.db import models
 from ferdolt import models as ferdolt_models
 
 class File(models.Model):
-    file = models.FileField()
+    file = models.FileField(upload_to="extractions")
     size = models.FloatField(null=True)
     is_deleted = models.BooleanField(default=False)
     last_modified_time = models.DateTimeField(null=True)
@@ -26,6 +26,10 @@ class Synchronization(models.Model):
     source = models.ForeignKey(ferdolt_models.Server, on_delete=models.SET_NULL, null=True)
     is_applied = models.BooleanField(default=False)
     file = models.ForeignKey(File, on_delete=models.PROTECT)
+
+class SynchronizationDatabase(models.Model):
+    synchronization = models.ForeignKey(Synchronization, on_delete=models.CASCADE)
+    database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE)
 
 class Message(models.Model):
     time_sent = models.DateTimeField(auto_now_add=True)

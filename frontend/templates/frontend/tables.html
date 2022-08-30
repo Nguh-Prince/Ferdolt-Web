@@ -13,7 +13,7 @@
     <a href="{% url 'frontend:tables' %}">{% trans "Tables" %}</a>
 </li>
 <li class="breadcrumb-item active" aria-current="page">
-    {{ table.name }}
+    {{ table.schema.database.name }}.{{ table.schema.name }}.{{ table.name }} 
 </li>
 {% else %}
 <li class="breadcrumb-item active">
@@ -102,7 +102,7 @@
 {% block modals %}
 {% if table %}
 <div class="modal" id="new-records-modal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-fullscreen">
         <div class="modal-content">
             <div class="modal-header">
                 <div class="modal-title">{% trans "Add record(s)" %}</div>
@@ -123,7 +123,8 @@
                         <tr>
                             {% for column in table.column_set.all %}
                             <td>
-                                <input type="text" id="{{ column.name }}-input" name="{{ column.name }}" class="form-control" />
+                                <input type="text" id="{{ column.name }}-input" name="{{ column.name }}"
+                                    class="form-control" />
                             </td>
                             {% endfor %}
                         </tr>
@@ -153,12 +154,16 @@
 <script>
     var TABLE_ID = {{ table.id }}
 
+    var DATABASE_NAME = "{{ table.schema.database.name }}"
+    var SCHEMA_NAME = "{{ table.schema.name }}"
+    var TABLE_NAME = "{{ table.name }}"
+
     $(document).ready(function () {
         // $('#tables').DataTable();
 
         $.ajax({
             type: "GET",
-            url: `http://${location.host}/ferdolt/tables/${TABLE_ID}`,
+            url: `http://${location.host}${API_URL}/ferdolt/tables/${TABLE_ID}`,
             success: function (data) {
                 console.log("Gotten response from tables API")
                 state.table = data
@@ -217,19 +222,21 @@
         for (let i = 0; i < numberOfRows; i++) {
             let row = createElement('tr', [], {})
 
-            // $(row).append(createElementsRecursively({
-            //     tag: "th",
-            //     classes: [],
-            //     attributes: {},
-            //     elements: [
-            //         {
-            //             tag: "i",
-            //             classes: [],
-            //             attributes: { "data-feather": "trash" }
-            //         }
-            //     ]
-            // }))
-            
+            row.appendChild(
+                createElementsRecursively({
+                    tag: 'td',
+                    classes: [],
+                    attributes: {},
+                    elements: [
+                        {
+                            tag: "i",
+                            classes: ["fa", "fa-trash", "delete"],
+                            attributes: {  }
+                        }
+                    ]
+                })
+            )
+
             for (let column of state.table.columns) {
                 let cell = createElementsRecursively({
                     tag: 'td',
@@ -255,7 +262,7 @@
         console.log("Calling getRecords()")
         $.ajax({
             type: "GET",
-            url: `http://${location.host}/ferdolt/tables/${TABLE_ID}/records/`,
+            url: `http://${location.host}${API_URL}/ferdolt/tables/${TABLE_ID}/records/`,
             success: function (data) {
                 state.tableRecords = data
                 console.log("In ajax request, the records are: ")
@@ -318,20 +325,41 @@
     function submitNewRows() {
         rows = []
 
-        $("#new-records-modal tbody tr").each( function() {
+        $("#new-records-modal tbody tr").each(function () {
             object = {}
 
-            $(this).find('input').each( function() {
+            $(this).find('input').each(function () {
                 let inputName = $(this).attr('name').toLowerCase()
 
-                if ( getTableColumnNames().includes( inputName ) ) {
+                if (getTableColumnNames().includes(inputName)) {
                     object[inputName] = $(this).val()
                 }
-            } )
+            })
 
             rows.push(object)
-        } )
+        })
 
+        $.ajax({
+            type: "POST",
+            url: `http://${location.host}${API_URL}/ferdolt/tables/insert_data/`,
+            data: JSON.stringify(
+                {
+                    database: DATABASE_NAME,
+                    schema: SCHEMA_NAME,
+                    table: TABLE_NAME,
+                    data: rows
+                }
+            ),
+            contentType: "application/json",
+            success: function() {
+                displayMessage("Records have been added successfully", ["alert", "alert-success"])
+            },
+            error: function(data) {
+                displayMessage("Error adding the records")
+                console.log(data.responseJSON)
+                console.log(rows)
+            }
+        })
         console.log(rows)
     }
 </script>

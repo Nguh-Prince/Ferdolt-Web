@@ -1,12 +1,16 @@
 import json
+import logging
 import os
 import datetime as dt
 
-from rest_framework import serializers
+import pyodbc
+
+from rest_framework import serializers, status
 from rest_framework.response import Response
 
 from . import models
 from django.core.files import File
+from django.db.models import Q
 from django.utils.translation import gettext as _
 from django.utils import timezone
 
@@ -16,40 +20,63 @@ from ferdolt import models as ferdolt_models
 
 from ferdolt_web import settings
 
-def custom_converter(object):
-    if isinstance(object, dt.datetime):
-        return object.strftime("%Y-%m-%d %H:%M:%S.%f")
-    
-    if isinstance(object, dt.date):
-        return object.strftime("%Y-%m-%d")
+from core.functions import custom_converter, extract_raw
 
-    if isinstance(object, dt.time):
-        return object.strftime("%H:%M:%S.%f")
-    
-    return object.__str__()
+class FluxDatabaseSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source="database.id")
+    name = serializers.CharField(source='database.name', required=False)
+    host = serializers.CharField(source='database.host', required=False)
+    port = serializers.CharField(source='database.port', required=False)
+
+    class Meta:
+        model = models.ExtractionDatabase
+        fields = ("id", "name", "host", "port")
+
+class FileSerializer(serializers.ModelSerializer):
+    file_name = serializers.CharField(source="file.name", read_only=True)
+    file_url = serializers.CharField(source='file.url', read_only=True)
+    file_size = serializers.FloatField(source='file.size', read_only=True)
+
+    class Meta:
+        model = models.File
+        fields = ("id", "file_name", "file_url", "file_size")
 
 class ExtractionSerializer(serializers.ModelSerializer):
-    class ExtractionDatabaseSerializer(serializers.ModelSerializer):
-        id = serializers.IntegerField(source="database.id")
-        name = serializers.CharField(source='database.name', required=False)
-        host = serializers.CharField(source='database.host', required=False)
-        port = serializers.CharField(source='database.port', required=False)
-
-        class Meta:
-            model = models.ExtractionDatabase
-            fields = ("id", "name", "host", "port")
-    
-    databases = ExtractionDatabaseSerializer(many=True, source='extractiondatabase_set')
+    databases = FluxDatabaseSerializer(many=True, source='extractiondatabase_set')
     use_pentaho = serializers.BooleanField(required=False, allow_null=True, write_only=True)
+    file_name = serializers.CharField(source="file.file.name", read_only=True)
+    file_url = serializers.CharField(source='file.file.url', read_only=True)
+    file_size = serializers.FloatField(source='file.file.size', read_only=True)
+    file_id = serializers.IntegerField(source='file.id', read_only=True)
 
     class Meta:
         model = models.Extraction
-        fields = ("start_time", "databases", "use_pentaho")
+        fields = ("id", "start_time", "time_made", "databases", "use_pentaho", "file_id", "file_name", "file_url", "file_size")
+        extra_kwargs = {
+            "time_made": {"read_only": True}
+        }
+
+    def validate_databases(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError(
+                _("Expected a list for the databases key, got a %(type)s instead" % { 'type': type(value) } )
+            )
+        
+        if value == []:
+            raise serializers.ValidationError(
+                _("The databases must have at least one item")
+            )
+
+        return value
 
     def create(self, validated_data):
         if 'use_pentaho' not in validated_data or not validated_data['use_pentaho']:
             databases = validated_data.pop("extractiondatabase_set")
-            start_time = validated_data.pop("start_time")
+
+            start_time = None
+
+            if 'start_time' in validated_data:
+                start_time = validated_data.pop("start_time")
 
             time_made = timezone.now()
 
@@ -57,7 +84,6 @@ class ExtractionSerializer(serializers.ModelSerializer):
             database_records = []
 
             for database in databases:
-
                 database_record = ferdolt_models.Database.objects.filter(id=database['database']['id'])
                 
                 if database_record.exists():
@@ -79,22 +105,27 @@ class ExtractionSerializer(serializers.ModelSerializer):
                     if connection:
                         cursor = connection.cursor()
 
-                        for table in ferdolt_models.Table.objects.filter(schema__database=database_record):
+                        for table in ferdolt_models.Table.objects.filter(Q(schema__database=database_record)):
                             schema_dictionary = database_dictionary.setdefault(table.schema.name, {})
                             table_results = schema_dictionary.setdefault(table.name, [])
 
+                            time_field = table.column_set.filter(Q(name="last_updated") | Q(name="deletion_time"))
+
                             query = f"""
                             SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table.schema.name}.{table.name} 
-                            { "WHERE last_updated >= ?" if start_time else "" }
+                            { f"WHERE { time_field.first().name } >= ?" if start_time and time_field.exists() else "" }
                             """
+                            try:
+                                rows = cursor.execute(query, start_time) if start_time else cursor.execute(query)
 
-                            rows = cursor.execute(query, start_time) if start_time else cursor.execute(query)
+                                columns = [ column[0] for column in cursor.description ]
 
-                            columns = [ column[0] for column in cursor.description ]
-
-                            for row in rows:
-                                row_dictionary = dict( zip( columns, row ) )
-                                table_results.append(row_dictionary)
+                                for row in rows:
+                                    row_dictionary = dict( zip( columns, row ) )
+                                    table_results.append(row_dictionary)
+                            except pyodbc.ProgrammingError as e:
+                                print(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
+                                raise e
                         
                     else:
                         raise serializers.ValidationError( _("Invalid connection parameters") )
@@ -114,3 +145,33 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
             return extraction
 
+        else:
+            # use pentaho to extract
+            os.system( f"{settings.PATH_TO_KITCHEN} { os.path.join(settings.BASE_DIR, 'pentaho_files') }" )
+
+class SynchronizationSerializer(serializers.ModelSerializer):
+    databases = FluxDatabaseSerializer(source="synchronizationdatabase_set", many=True)
+    use_pentaho = serializers.BooleanField(required=False, allow_null=True, write_only=True)
+    
+    file_id = serializers.IntegerField(source='file.id', read_only=True)
+    file_name = serializers.CharField(source="file.file.name", read_only=True)
+    file_url = serializers.CharField(source='file.file.url', read_only=True)
+    file_size = serializers.FloatField(source='file.file.size', read_only=True)
+    
+    class Meta:
+        model = models.Synchronization
+        fields = ("id", "databases", "use_pentaho", "file_id", "file_name", "file_url", "file_size")
+        pass
+
+    def validate_databases(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError(
+                _("Expected a list for the databases key, got a %(type)s instead" % { 'type': type(value) } )
+            )
+        
+        if value == []:
+            raise serializers.ValidationError(
+                _("The databases must have at least one item")
+            )
+
+        return value

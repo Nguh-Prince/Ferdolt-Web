@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.index, name="index"),
     path("databases/", views.databases, name="databases"),
     path("databases/<int:id>/", views.databases, name="database-detail"),
+    path("extractions/", views.extractions, name="extractions"),
     path("schemas/", views.schemas, name="schemas"),
     path("tables/", views.tables, name="tables"),
     path("tables/<int:id>/", views.tables, name="tables"),

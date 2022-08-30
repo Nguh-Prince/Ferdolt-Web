@@ -6,32 +6,9 @@ import pyodbc
 import re
 
 from ferdolt import models as ferdolt_models
+from flux import models as flux_models
 
-sql_server_regex = re.compile("sql\s*server", re.I)
-postgresql_regex = re.compile("postgres", re.I)
-
-def get_database_connection(database: ferdolt_models.Database) -> pyodbc.Cursor:
-    dbms_name = database.dbms_version.dbms.name
-
-    if sql_server_regex.search(dbms_name):
-        driver = "{SQL Server Native Client 11.0}"
-    
-    if postgresql_regex.search(dbms_name):
-        driver = "{PostgresQL Unicode}"
-
-    connection_string = (
-        f"Driver={driver};"
-        f"Server={database.host};"
-        f"Database={database.name};"
-        f"UID={database.username};"
-        f"PWD={database.password};"
-        )
-    try:
-        connection = pyodbc.connect(connection_string)
-        return connection
-    except pyodbc.ProgrammingError as e:
-        print(_("Error connecting to the %(database_name)s database"))
-        return None
+from core.functions import get_database_connection, sql_server_regex, postgresql_regex
 
 ################################################################################################
 # Views
@@ -190,7 +167,7 @@ def servers(request, id: int=None):
         return render(request, "frontend/servers.html", context={'server': server})
 
 def extractions(request):
-    return render(request, "frontend/extractions.html", context={'extractions': ferdolt_models.Extraction.objects.all()})
+    return render(request, "frontend/extractions.html", context={'extractions': flux_models.Extraction.objects.all()})
 
 def synchronizations(request):
-    return render(request, "frontend/synchronizations.html", context={'synchronizations': ferdolt_models.Synchronization.objects.all()})
+    return render(request, "frontend/synchronizations.html", context={'synchronizations': flux_models.Synchronization.objects.all()})

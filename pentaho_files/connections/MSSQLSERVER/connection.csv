@@ -1,0 +1,2 @@
+ConnectionName,HostName,DatabaseName,InstanceName,PortNumber,Username,Password
+MSSQLSERVER-BikeStores,localhost,BikeStores,SQLEXPRESS,1433,sa,groupesia@2022

@@ -21,7 +21,6 @@
     <link href="{% static 'frontend/assets/css/bootstrap.min.css' %}" rel="stylesheet" type="text/css" />
     <link href="{% static 'frontend/assets/css/icons.min.css' %}" r el="stylesheet" type="text/css" />
     <link href="{% static 'frontend/assets/css/metisMenu.min.css' %}" rel="stylesheet" type="text/css" />
-    <link href="{% static 'frontend/plugins/daterangepicker/daterangepicker.css' %}" rel="stylesheet" type="text/css" />
     <link href="{% static 'frontend/assets/css/app.min.css' %}" rel="stylesheet" type="text/css" />
     <script src="{% static 'frontend/assets/js/jquery.min.js' %}"></script>
 
@@ -84,7 +83,7 @@
 
                    <ul class="nav-second-level" aria-expanded="false">
                         <li class="nav-item">
-                            <a href="#" class="nav-link">
+                            <a href="{% url 'frontend:extractions' %}" class="nav-link">
                                 <i data-feather="upload-cloud" class="align-self-center menu-icon"></i> {% trans "Extractions" %}
                             </a>
                         </li>
@@ -291,7 +290,7 @@
                 </ul>
             </nav>
 
-            <div id="messages" class="container"></div>
+            <div id="messages" style="z-index: 1100;" class="container"></div>
             <!-- end navbar-->
         </div>
         <!-- Top Bar End -->
@@ -312,8 +311,6 @@
 <script src="{% static 'frontend/assets/js/waves.js' %}"></script>
 <script src="{% static 'frontend/assets/js/feather.min.js' %}"></script>
 <script src="{% static 'frontend/assets/js/simplebar.min.js' %}"></script>
-<script src="{% static 'frontend/assets/js/moment.js' %}"></script>
-<script src="{% static 'frontend/plugins/daterangepicker/daterangepicker.js' %}"></script>
 
 <!-- App js -->
 <script src="{% static 'frontend/assets/js/app.js' %}"></script>

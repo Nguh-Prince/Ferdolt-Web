@@ -1,6 +1,11 @@
+import logging
 from rest_framework import serializers
+import sqlite3
 from django.utils.translation import gettext as _
 
+import pyodbc
+
+from ferdolt_web import settings
 from frontend.views import get_database_connection
 
 from . import models
@@ -65,6 +70,24 @@ class DatabaseSerializer(serializers.ModelSerializer):
 
         instance = self.Meta.model(dbms_version=version, **validated_data)
         instance.save()
+        try:
+            connection = sqlite3.connect(settings.PATH_TO_PENTAHO_DATABASE)
+            cursor = connection.cursor()
+            
+            query = """
+            INSERT INTO Server (server_name, server_ip_address, server_port, server_database_name, server_username, server_password, server_instance_name) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """
+            try:
+                cursor.execute( query, ( instance.name, instance.host, instance.port, instance.name, instance.username, instance.password, instance.instance_name ) )
+            except pyodbc.ProgrammingError as e:
+                logging.error( f"Error executing query: {query}. Error: {str(e)}" )
+
+        except pyodbc.ProgrammingError as e:
+            logging.error( f"Error connecting to the pentaho database. Error: {str(e)}" )
+        except pyodbc.InterfaceError as e:
+            logging.error(
+                f"Error connecting to the pentaho database. Error: {str(e)}"
+            )
 
         return instance
 
@@ -164,8 +187,6 @@ class TableRecordsSerializer(serializers.Serializer):
         return super().validate(attrs)
 
 
-    
-
 class TableInsertSerializer(serializers.Serializer):
     # serializer for DML operations on the table
     database = serializers.CharField(max_length=150)
@@ -199,8 +220,11 @@ class TableInsertSerializer(serializers.Serializer):
 
             attrs['atomic'] = 'atomic' in attrs and attrs['atomic']
 
-            table_columns = set([ f['name'] for f in attrs['table'].column_set.values("name") ])
-            table_primary_key_columns =  [ f['name'] for f in attrs['table'].column_set.filter(columnconstraint__is_primary_key=True).values("name") ]
+            table_column_set = attrs['table'].column_set.all()
+
+            table_columns = set([ f['name'] for f in table_column_set.values("name") ])
+            table_primary_key_columns =  [ f['name'] for f in table_column_set.filter(columnconstraint__is_primary_key=True).values("name") ]
+            not_null_columns = set( [ f['name'] for f in table_column_set.filter(is_nullable=False) ] )
 
             for i in range( len( attrs['data'] ) ):
                 if not isinstance( attrs['data'][i], dict ):
@@ -215,10 +239,19 @@ class TableInsertSerializer(serializers.Serializer):
                 # at least one key in the dictionary must correspond to a column in the target table
                 if not columns_in_common:
                     validation_errors.append(
-                        serializers.ValidationError( _("At least one of the keys in the dictionary must be in %(set)s set" 
-                        % { 'set': str(columns_in_common) }) )
+                        serializers.ValidationError( _("Error on item %(index)d, at least one of the keys in the dictionary must be in %(set)s set" 
+                        % { 'set': str(columns_in_common), 'index': i+1}) )
                     )
-            
+                
+                not_null_columns_not_found = not_null_columns - columns_in_common
+
+                if not_null_columns_not_found:
+                    validation_errors.append(
+                        serializers.ValidationError( _("Error on item %(index)d, the following non null columns were missing %(set)s" % {
+                            'index': i+1, 'set': str( not_null_columns_not_found )
+                        }) )
+                    )
+
             if validation_errors:
                 raise serializers.ValidationError(validation_errors)
 

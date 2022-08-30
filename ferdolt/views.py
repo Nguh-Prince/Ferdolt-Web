@@ -9,10 +9,12 @@ from rest_framework import serializers as drf_serializers
 import logging
 import pyodbc
 
+from django.db.models import Q
 from django.utils.translation import gettext as _
 from django.utils import timezone
 
-from frontend.views import columns, get_database_connection
+from common.viewsets import MultipleSerializerViewSet
+from core.functions import get_database_connection
 
 from . import serializers
 from . import  permissions
@@ -24,7 +26,6 @@ class DatabaseManagementSystemViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return models.DatabaseManagementSystem.objects.all()
-
 
 
 class DatabaseManagementSystemVersionViewSet(viewsets.ModelViewSet):
@@ -47,8 +48,14 @@ class DatabaseSchemaViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return models.DatabaseSchema.objects.all()
 
-class TableViewSet(viewsets.ModelViewSet):
+class TableViewSet(MultipleSerializerViewSet):
     serializer_class = serializers.TableSerializer
+    
+    serializer_classes = {
+        'insert_data': serializers.TableInsertSerializer,
+        'update': serializers.TableUpdateSerializer,
+        'delete': serializers.TableDeleteSerializer
+    }
 
     def get_queryset(self):
         return models.Table.objects.all()
@@ -93,7 +100,7 @@ class TableViewSet(viewsets.ModelViewSet):
 
         cursor = connection.cursor()
 
-        table_column_set = table.column_set.values("name")
+        table_column_set = table.column_set.filter(Q(columnconstraint__is_primary_key=False) | Q(columnconstraint__isnull=True)).values("name")
 
         error_occured_flag = False
         records_inserted = []
@@ -102,7 +109,7 @@ class TableViewSet(viewsets.ModelViewSet):
             columns_in_common = [ column['name'] for column in table_column_set if column['name'] in record.keys() ]
             
             values_to_insert = tuple( record[f] for f in columns_in_common )
-
+            breakpoint()
             query = f"""
             INSERT INTO {table.schema.name}.{table.name} ( { ', '.join( columns_in_common ) } ) VALUES ( { ', '.join( [ '?' for _ in columns_in_common] ) } )
             """

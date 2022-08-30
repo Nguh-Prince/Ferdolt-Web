@@ -30,7 +30,7 @@ class Database(models.Model):
     name = models.CharField(max_length=100)
     username = models.CharField(max_length=150)
     password = models.TextField()
-    instance_name = models.CharField(max_length=100, null=True)
+    instance_name = models.CharField(max_length=100, null=True, blank=True)
     host = models.CharField(max_length=150, default="localhost")
     port = models.IntegerField(default=1433);
 
@@ -77,9 +77,9 @@ class Column(models.Model):
     table = models.ForeignKey(Table, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
     data_type = models.CharField(max_length=50)
-    datetime_precision = models.IntegerField(null=True)
-    character_maximum_length = models.IntegerField(null=True)
-    numeric_precision = models.IntegerField(null=True)
+    datetime_precision = models.IntegerField(null=True, blank=True)
+    character_maximum_length = models.IntegerField(null=True, blank=True)
+    numeric_precision = models.IntegerField(null=True, blank=True)
     is_nullable = models.BooleanField(default=True)
 
     class Meta:
@@ -87,6 +87,9 @@ class Column(models.Model):
         verbose_name_plural = _("Columns")
         unique_together = [
             ["table", "name"]
+        ]
+        ordering = [
+            "table__schema__database__name", "table__schema__name", "table__name", "name"
         ]
 
     def __str__(self):
@@ -96,6 +99,18 @@ class ColumnConstraint(models.Model):
     column = models.ForeignKey(Column, on_delete=models.CASCADE)
     is_primary_key = models.BooleanField(default=False)
     is_foreign_key = models.BooleanField(default=False)
+    references = models.ForeignKey(Column, null=True, on_delete=models.SET_NULL, related_name='references', blank=True)
+
+    class Meta:
+        ordering = [ "column__table__schema__database__name", "column__table__schema__name", "column__table__name", "column__name", "is_primary_key", "is_foreign_key" ]
+
+    def __str__(self):
+        string = ""
+        if self.is_primary_key and not self.is_foreign_key:
+            string = f"PK({ self.column.name }) on { self.column.table.__str__() }"
+        elif self.is_foreign_key and not self.is_primary_key:
+            string = f"FK({ self.column.name }) on { self.column.table.__str__() } { f'references {self.references.__str__()}' if self.references else '' }"
+        return string
 
 def generate_random_string(length, include_uppercase=True, include_lowercase=False, include_digits=True, include_symbols=False, symbol_set:str=''):
         if not include_uppercase and not include_lowercase and not include_digits and not include_symbols:
@@ -126,7 +141,7 @@ def generate_server_id(length=15):
 class Server(models.Model):
     ID_MAX_LENGTH = 15
     name = models.CharField(max_length=50, unique=True)
-    location = models.TextField(null=True)
+    location = models.TextField(null=True, blank=True)
     server_id = models.CharField(max_length=ID_MAX_LENGTH, unique=True, default=generate_server_id)
     address = models.CharField(max_length=150)
-    port = models.IntegerField(null=True)
+    port = models.IntegerField(null=True, blank=True)
