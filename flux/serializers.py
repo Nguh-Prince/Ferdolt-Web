@@ -27,10 +27,31 @@ class FluxDatabaseSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='database.name', required=False)
     host = serializers.CharField(source='database.host', required=False)
     port = serializers.CharField(source='database.port', required=False)
+    
+    class FluxSchemaSerializer(serializers.ModelSerializer):
+        class FluxTableSerializer(serializers.ModelSerializer):
+            class FluxColumnSerializer(serializers.ModelSerializer):
+                class Meta:
+                    model = ferdolt_models.Column
+                    fields = ( "id", "name", )
+
+            columns = FluxColumnSerializer(many=True, required=False, allow_null=True, source="column_set")
+
+            class Meta:
+                model = ferdolt_models.Table
+                fields = ("id", "name", "columns")
+
+        tables = FluxTableSerializer(many=True, required=False, allow_null=True, source="table_set")
+
+        class Meta:
+            model = ferdolt_models.DatabaseSchema
+            fields = ( "id", "name", "tables" )
+            
+    schemas = FluxSchemaSerializer(many=True, required=False, allow_null=True, source='database.databaseschema_set')
 
     class Meta:
         model = models.ExtractionDatabase
-        fields = ("id", "name", "host", "port")
+        fields = ("id", "name", "host", "port", "schemas")
 
 class FileSerializer(serializers.ModelSerializer):
     file_name = serializers.CharField(source="file.name", read_only=True)
@@ -48,10 +69,11 @@ class ExtractionSerializer(serializers.ModelSerializer):
     file_url = serializers.CharField(source='file.file.url', read_only=True)
     file_size = serializers.FloatField(source='file.file.size', read_only=True)
     file_id = serializers.IntegerField(source='file.id', read_only=True)
+    use_time = serializers.BooleanField(default=True, required=False)
 
     class Meta:
         model = models.Extraction
-        fields = ("id", "start_time", "time_made", "databases", "use_pentaho", "file_id", "file_name", "file_url", "file_size")
+        fields = ("id", "start_time", "time_made", "databases", "use_pentaho", "file_id", "file_name", "file_url", "file_size", "use_time")
         extra_kwargs = {
             "time_made": {"read_only": True}
         }
@@ -74,9 +96,13 @@ class ExtractionSerializer(serializers.ModelSerializer):
             databases = validated_data.pop("extractiondatabase_set")
 
             start_time = None
+            
+            # set use_time to False if it is passed as False else True
+            use_time = not ( 'use_time' in validated_data and not validated_data['use_time'] )
 
-            if 'start_time' in validated_data:
+            if 'start_time' in validated_data and use_time:
                 start_time = validated_data.pop("start_time")
+
 
             time_made = timezone.now()
 
@@ -93,7 +119,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
                     database_dictionary = results.setdefault(database_record.name, {})
                     
-                    # get the last time data was extracted from this database
+                    # get the last time data was extracted from this database if no start time was provided
                     if not start_time:
                         latest_extraction: self.Meta.model = self.Meta.model.objects.filter(extractiondatabase__database=database_record).last()
 
@@ -104,29 +130,48 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
                     if connection:
                         cursor = connection.cursor()
-
-                        for table in ferdolt_models.Table.objects.filter(Q(schema__database=database_record)):
-                            schema_dictionary = database_dictionary.setdefault(table.schema.name, {})
-                            table_results = schema_dictionary.setdefault(table.name, [])
-
-                            time_field = table.column_set.filter(Q(name="last_updated") | Q(name="deletion_time"))
-
-                            query = f"""
-                            SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table.schema.name}.{table.name} 
-                            { f"WHERE { time_field.first().name } >= ?" if start_time and time_field.exists() else "" }
-                            """
-                            try:
-                                rows = cursor.execute(query, start_time) if start_time else cursor.execute(query)
-
-                                columns = [ column[0] for column in cursor.description ]
-
-                                for row in rows:
-                                    row_dictionary = dict( zip( columns, row ) )
-                                    table_results.append(row_dictionary)
-                            except pyodbc.ProgrammingError as e:
-                                print(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
-                                raise e
                         
+                        schemas = None
+
+                        if 'databaseschema_set' in database['database'] and database['database']['databaseschema_set']:
+                            schemas = database['database']['databaseschema_set']
+                        else:
+                            schemas = FluxDatabaseSerializer.FluxSchemaSerializer( database_record.databaseschema_set.all(), many=True ).data
+
+                        for schema in schemas:
+                            tables = None
+
+                            schema_tables_key = 'table_set'
+                            if schema_tables_key in schema and schema[schema_tables_key]:
+                                tables = schema[schema_tables_key]
+                            else:
+                                tables = FluxDatabaseSerializer.FluxSchemaSerializer.FluxTableSerializer( ferdolt_models.Table.objects.filter( schema__database=database_record, schema__name=schema['name'] ), many=True ).data
+
+                            for _table in tables:
+                                table = ferdolt_models.Table.objects.get(schema__name=schema['name'], schema__database=database_record, name=_table['name'])
+
+                                schema_dictionary = database_dictionary.setdefault(schema['name'], {})
+                                table_results = schema_dictionary.setdefault( table.name, [] )
+
+                                time_field = table.column_set.filter( Q(name='last_updated') | Q(name="deletion_time") )
+        
+                                query = f"""
+                                SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table.schema.name}.{table.name} 
+                                { f"WHERE { time_field.first().name } >= ?" if start_time and time_field.exists() and use_time else "" }
+                                """
+                                breakpoint()
+                                try:
+                                    rows = cursor.execute(query, start_time) if start_time and time_field.exists() and use_time else cursor.execute(query)
+
+                                    columns = [ column[0] for column in cursor.description ]
+
+                                    for row in rows:
+                                        row_dictionary = dict( zip( columns, row ) )
+                                        table_results.append(row_dictionary)
+                                except pyodbc.ProgrammingError as e:
+                                    print(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
+                                    raise e
+                      
                     else:
                         raise serializers.ValidationError( _("Invalid connection parameters") )
                 else:
@@ -148,6 +193,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
         else:
             # use pentaho to extract
             os.system( f"{settings.PATH_TO_KITCHEN} { os.path.join(settings.BASE_DIR, 'pentaho_files') }" )
+
 
 class SynchronizationSerializer(serializers.ModelSerializer):
     databases = FluxDatabaseSerializer(source="synchronizationdatabase_set", many=True)

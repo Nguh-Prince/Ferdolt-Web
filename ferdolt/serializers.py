@@ -44,9 +44,9 @@ class DatabaseSerializer(serializers.ModelSerializer):
     class DatabaseSchemas(serializers.ModelSerializer):
         class Meta:
             model = models.DatabaseSchema
-            fields = ( "name" )
+            fields = ( "name", )
     
-    schemas = DatabaseSchemas(source='schema_set', many=True, read_only=True)
+    schemas = DatabaseSchemas(source='databaseschema_set', many=True, read_only=True)
     version = DatabaseManagementSystemVersionSerializer(source='dbms_version')
 
     class Meta: 
@@ -90,6 +90,29 @@ class DatabaseSerializer(serializers.ModelSerializer):
             )
 
         return instance
+
+class DatabaseDetailSerializer(DatabaseSerializer):
+    class DatabaseSchemas(serializers.ModelSerializer):
+        class DatabaseTables(serializers.ModelSerializer):
+            class DatabaseTableColumns(serializers.ModelSerializer):
+                class Meta:
+                    model = models.Column
+                    fields = ( "name", )
+            
+            columns = DatabaseTableColumns(many=True, allow_null=True, required=False, source="column_set")
+            class Meta:
+                model = models.Table
+                fields = ("name", "columns")
+
+        tables = DatabaseTables(many=True, allow_null=True, required=False, source="table_set")
+        class Meta:
+            model = models.DatabaseSchema
+            fields = ( "name", "tables" )
+
+    schemas = DatabaseSchemas(source='databaseschema_set', many=True, read_only=True)
+    class Meta: 
+        model = models.Database
+        fields = ( "id", "name", "username", "password", 'host', 'port', 'schemas', 'version', 'instance_name' )
 
 class DatabaseSchemaSerializer(serializers.ModelSerializer):
     class SchemaTables(serializers.ModelSerializer):

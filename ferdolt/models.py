@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.utils.translation import gettext as _
 
 import string
@@ -75,14 +76,34 @@ class Table(models.Model):
     def __str__(self):
         return f"{self.schema.database.name}.{self.schema.name}.{self.name}"
 
+    def get_level(self):
+        referenced_tables = Table.objects.filter( 
+        id__in=ColumnConstraint.objects.filter( 
+            Q( references__isnull=False ) & Q( column__table=self ) & ~Q( references__table=self ) )
+            .values("references__table__id") 
+        )
+
+        if not referenced_tables.exists():
+            return 0
+        else:
+            for referenced_table in referenced_tables:
+                level = max( level, referenced_table.set_level )
+
+        return level + 1
+
+    def set_level(self):
+        level = self.get_level()
+        self.level = level
+        self.save()
+
 class Column(models.Model):
-    table = models.ForeignKey(Table, on_delete=models.CASCADE)
-    name = models.CharField(max_length=100)
-    data_type = models.CharField(max_length=50)
+    table: Table = models.ForeignKey(Table, on_delete=models.CASCADE)
+    name: str = models.CharField(max_length=100)
+    data_type: str = models.CharField(max_length=50)
     datetime_precision = models.IntegerField(null=True, blank=True)
-    character_maximum_length = models.IntegerField(null=True, blank=True)
-    numeric_precision = models.IntegerField(null=True, blank=True)
-    is_nullable = models.BooleanField(default=True)
+    character_maximum_length: str = models.IntegerField(null=True, blank=True)
+    numeric_precision: int = models.IntegerField(null=True, blank=True)
+    is_nullable: bool = models.BooleanField(default=True)
 
     class Meta:
         verbose_name = _("Column")
@@ -98,10 +119,10 @@ class Column(models.Model):
         return f"{self.table.__str__()} {self.name}"
 
 class ColumnConstraint(models.Model):
-    column = models.ForeignKey(Column, on_delete=models.CASCADE)
-    is_primary_key = models.BooleanField(default=False)
-    is_foreign_key = models.BooleanField(default=False)
-    references = models.ForeignKey(Column, null=True, on_delete=models.SET_NULL, related_name='references', blank=True)
+    column: Column = models.ForeignKey(Column, on_delete=models.CASCADE)
+    is_primary_key: bool = models.BooleanField(default=False)
+    is_foreign_key: bool = models.BooleanField(default=False)
+    references: Column = models.ForeignKey(Column, null=True, on_delete=models.SET_NULL, related_name='references', blank=True)
 
     class Meta:
         ordering = [ "column__table__schema__database__name", "column__table__schema__name", "column__table__name", "column__name", "is_primary_key", "is_foreign_key" ]
@@ -113,6 +134,11 @@ class ColumnConstraint(models.Model):
         elif self.is_foreign_key and not self.is_primary_key:
             string = f"FK({ self.column.name }) on { self.column.table.__str__() } { f'references {self.references.__str__()}' if self.references else '' }"
         return string
+
+    def save(self, *args, **kwargs):
+        # modify the level of the table if need be
+        self.column.table.set_level()
+        super().save(*args, **kwargs)
 
 def generate_random_string(length, include_uppercase=True, include_lowercase=False, include_digits=True, include_symbols=False, symbol_set:str=''):
         if not include_uppercase and not include_lowercase and not include_digits and not include_symbols:

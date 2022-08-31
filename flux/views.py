@@ -1,7 +1,5 @@
-from heapq import merge
 import json
 import logging
-from xml.etree.ElementTree import XML
 import pyodbc
 import re
 

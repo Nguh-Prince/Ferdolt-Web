@@ -36,8 +36,12 @@ class DatabaseManagementSystemVersionViewSet(viewsets.ModelViewSet):
         return models.DatabaseManagementSystemVersion.objects.all()
 
 
-class DatabaseViewSet(viewsets.ModelViewSet):
+class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     serializer_class = serializers.DatabaseSerializer
+
+    serializer_classes = {
+        'retrieve': serializers.DatabaseDetailSerializer
+    }
 
     def get_queryset(self):
         return models.Database.objects.all()
