@@ -188,7 +188,7 @@
 
         $.ajax({
             type: "GET",
-            url: `http://${location.host}${API_URL}/ferdolt/databases/`,
+            url: `http://${location.host}${API_URL}/ferdolt/databases/?format=json`,
             contentType: 'application/json',
             success: function (data) {
                 state.databases = data
@@ -241,13 +241,14 @@
         }
     }
 
-    function displayDatabase(databaseObject, containerSelector="#container") {
+    function displayDatabase(databaseObject, containerSelector="#databases") {
         console.log("Creating card...")
+
         let card = createElementsRecursively(
             {
                 tag: "div",
                 classes: ["card", "mx-1"],
-                attributes: { style: "width: 18rem;", id: `database-${database['id']}` },
+                attributes: { style: "width: 18rem;", id: `database-${databaseObject['id']}` },
                 elements: [
                     {
                         tag: "div",
@@ -274,7 +275,7 @@
                             {
                                 tag: "a",
                                 classes: ["btn", "btn-primary", "database-detail-link"],
-                                attributes: { href: `${location.pathname}${database['id']}` }
+                                attributes: { href: `${location.pathname}${databaseObject['id']}` }
                             },
                         ]
                     }
@@ -282,16 +283,19 @@
             }
         )
 
-        $(card).find(".card-title").text(database["name"])
+        console.log("Created card...")
+        $(card).find(".card-title").text(databaseObject["name"])
 
-        $(card).find('.card-subtitle').text(`${database['version']['dbms_object']['name']} ${database['version']['version_number']}`)
+        $(card).find('.card-subtitle').text(`${databaseObject['version']['dbms_object']['name']} ${databaseObject['version']['version_number']}`)
         $('.card')
 
-        $(card).find('.database-host').text(`Host: ${database['host']}`)
-        $(card).find('.database-port').text(`Port: ${database['port']}`)
+        $(card).find('.database-host').text(`Host: ${databaseObject['host']}`)
+        $(card).find('.database-port').text(`Port: ${databaseObject['port']}`)
 
         $(card).find('.database-detail-link').text("Details")
         $(containerSelector).append(card)
+
+        console.log("Appended card...")
     }
 
     $("#dbms-input").change(function () {

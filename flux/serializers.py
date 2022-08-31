@@ -148,7 +148,9 @@ class ExtractionSerializer(serializers.ModelSerializer):
                                 tables = FluxDatabaseSerializer.FluxSchemaSerializer.FluxTableSerializer( ferdolt_models.Table.objects.filter( schema__database=database_record, schema__name=schema['name'] ), many=True ).data
 
                             for _table in tables:
-                                table = ferdolt_models.Table.objects.get(schema__name=schema['name'], schema__database=database_record, name=_table['name'])
+                                table: ferdolt_models.Table = ferdolt_models.Table.objects.get(schema__name=schema['name'], schema__database=database_record, name=_table['name'])
+                                
+                                table_query_name = table.get_queryname()
 
                                 schema_dictionary = database_dictionary.setdefault(schema['name'], {})
                                 table_results = schema_dictionary.setdefault( table.name, [] )
@@ -156,10 +158,10 @@ class ExtractionSerializer(serializers.ModelSerializer):
                                 time_field = table.column_set.filter( Q(name='last_updated') | Q(name="deletion_time") )
         
                                 query = f"""
-                                SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table.schema.name}.{table.name} 
+                                SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table_query_name} 
                                 { f"WHERE { time_field.first().name } >= ?" if start_time and time_field.exists() and use_time else "" }
                                 """
-                                breakpoint()
+                                
                                 try:
                                     rows = cursor.execute(query, start_time) if start_time and time_field.exists() and use_time else cursor.execute(query)
 

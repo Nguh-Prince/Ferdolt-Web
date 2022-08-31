@@ -45,6 +45,11 @@ class Database(models.Model):
     def __str__(self):
         return f"{self.dbms_version.__str__()} ({self.name})"
 
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        
+        return super().save(*args, **kwargs)
+
 class DatabaseSchema(models.Model):
     database = models.ForeignKey(Database, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
@@ -58,6 +63,11 @@ class DatabaseSchema(models.Model):
 
     def __str__(self):
         return f"{self.database.name}.{self.name}"
+    
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        
+        return super().save(*args, **kwargs)
 
 class Table(models.Model):
     schema = models.ForeignKey(DatabaseSchema, on_delete=models.CASCADE)
@@ -75,6 +85,11 @@ class Table(models.Model):
 
     def __str__(self):
         return f"{self.schema.database.name}.{self.schema.name}.{self.name}"
+    
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        
+        return super().save(*args, **kwargs)
 
     def get_level(self):
         referenced_tables = Table.objects.filter( 
@@ -95,6 +110,15 @@ class Table(models.Model):
         level = self.get_level()
         self.level = level
         self.save()
+
+    def get_queryname(self) -> str:
+        """
+        Gets the schema name and table name or just the table name in cases where the schema is null to be used for query e.g. schema.table
+        """
+        if self.schema.name:
+            return f"{self.schema.name}.{self.name}"
+        else:
+            return self.name
 
 class Column(models.Model):
     table: Table = models.ForeignKey(Table, on_delete=models.CASCADE)
@@ -117,6 +141,11 @@ class Column(models.Model):
 
     def __str__(self):
         return f"{self.table.__str__()} {self.name}"
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        
+        return super().save(*args, **kwargs)
 
 class ColumnConstraint(models.Model):
     column: Column = models.ForeignKey(Column, on_delete=models.CASCADE)
@@ -173,3 +202,8 @@ class Server(models.Model):
     server_id = models.CharField(max_length=ID_MAX_LENGTH, unique=True, default=generate_server_id)
     address = models.CharField(max_length=150)
     port = models.IntegerField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        
+        return super().save(*args, **kwargs)
