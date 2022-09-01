@@ -39,33 +39,34 @@
         <div class="accordion" id="main-accordion">
             {% for schema in database.databaseschema_set.all %}
             <div class="accordion-item">
-                <h2 class="accordion-header" id="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-header">
+                <h2 class="accordion-header" id="{{ database.name }}{{ database.id }}{{schema.name}}itemheader">
                     <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                        data-bs-target="#{{ database.name }}-{{ database.id }}-{{schema.name}}-item-collapse"
-                        aria-controls="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-collapse">
+                        data-bs-target="#{{ database.name }}{{ database.id }}{{schema.name}}itemcollapse"
+                        >
                         <input type="checkbox" class="form-check-input mx-2 select-all-tables"
                             data-schema-id="{{ schema.id }}" /> {{ schema.name }}
                     </button>
                 </h2>
                 <div class="accordion-collapse collapse show"
-                    aria-labelledby="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-header"
-                    id="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-collapse">
+                    aria-labelledby="{{ database.name }}{{ database.id }}{{schema.name}}itemheader"
+                    id="{{ database.name }}{{ database.id }}{{schema.name}}itemcollapse">
                     <div class="accordion-body">
                         <div class="accordion"
-                            id="{{ database.name }}-{{ database.id }}-{{schema.name}}-item-accordion">
+                            id="{{ database.name }}{{ database.id }}{{schema.name}}itemaccordion">
                             {% for table in schema.table_set.all %}
                             <div class="accordion-item">
                                 <h2 class="accordion-header"
-                                    id="{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-header">
+                                    id="{{ database.name }}{{ database.id }}{{schema.name}}{{ table.name }}item-header">
                                     <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                                        data-bs-target="#{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-collapse"
-                                        aria-controls="{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-collapse"><input
-                                            type="checkbox" class="form-check-input mx-2 select-table"
-                                            data-table-id="{{ table.id }}" data-schema-id="{{ schema.id }}" /> {{ table.name }}</button>
+                                        data-bs-target="#{{ database.name }}{{ database.id }}{{schema.name}}{{ table.name }}itemcollapse"
+                                        
+                                        >
+                                            <input type="checkbox" class="form-check-input mx-2 select-table"
+                                                data-table-id="{{ table.id }}" data-schema-id="{{ schema.id }}" /> {{ table.name }}</button>
                                 </h2>
                                 <div class="accordion-collapse collapse"
-                                    aria-labelledby="{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-header"
-                                    id="{{ database.name }}-{{ database.id }}-{{schema.name}}-{{ table.name }}-item-collapse">
+                                    aria-labelledby="{{ database.name }}{{ database.id }}{{schema.name}}{{ table.name }}itemheader"
+                                    id="{{ database.name }}{{ database.id }}{{schema.name}}{{ table.name }}item-collapse">
                                     <div class="accordion-body">
                                         <table class="table table-striped">
                                             <thead>
@@ -99,7 +100,6 @@
             </div>
             {% endfor %}
         </div>
-
         {% endif %}
     </div>
 </div>
@@ -195,6 +195,24 @@
                 displayDatabases()
             }
         })
+    })
+
+    $('.accordion-button').click(function() {
+        console.log("Clicked an accordion button")
+
+        target = $(this).attr('data-bs-target')
+
+        if (target) {
+            $(`${target}`).toggleClass('show')
+
+            targetElement = document.querySelector(target)
+            console.log(`The target element is `)
+            console.log(targetElement)
+
+            targetElement.classList.toggle('show')
+
+            console.log('Toggled element successfully, I hope.')
+        }
     })
 
     $(".select-all-tables").change(function () {

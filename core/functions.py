@@ -64,6 +64,49 @@ def get_database_connection(database: ferdolt_models.Database) -> pyodbc.Cursor:
             logging.error(f"Error connecting to the Postgres database {database.name} on {database.host}:{database.port}. Connection string: '{connection_string}'. Error: {str(e)}")
             return None
 
+def get_create_temporary_table_query(database, temporary_table_name, columns_and_datatypes_string):
+    """
+    Get the query to create a temporary table based on the database
+    """
+    dbms_name = database.dbms_version.dbms.name
+
+    if sql_server_regex.search(dbms_name):
+        return f"CREATE ##{temporary_table_name} {columns_and_datatypes_string}"
+
+    if postgresql_regex.search(dbms_name):
+        return f"CREATE TEMP TABLE {temporary_table_name} {columns_and_datatypes_string}"
+
+def get_temporary_table_name(database, temporary_table_name: str):
+    """
+    Get the query to create a temporary table based on the database
+    """
+    dbms_name = database.dbms_version.dbms.name
+    string = ''
+
+    if sql_server_regex.search(dbms_name):
+        return f"##{temporary_table_name}"
+
+    if postgresql_regex.search(dbms_name):
+        return f"{temporary_table_name}"
+
+def get_dbms_booleans(database) -> dict:
+    dbms_name = database.dbms_version.dbms.name
+
+    is_sqlserver_db, is_postgres_db, is_mysql_db = False, False, False
+
+    if sql_server_regex.search(dbms_name):
+        is_sqlserver_db = True
+    elif postgresql_regex.search(dbms_name):
+        is_postgres_db = True
+    elif 0:
+        is_mysql_db = True
+
+    return {
+        "is_sqlserver_db": is_sqlserver_db, 
+        "is_postgres_db": is_postgres_db, 
+        "is_mysql_db": is_mysql_db
+    }
+
 def extract_raw(database: ferdolt_models.Database, start_time: dt.datetime, end_time: None):
     connection = get_database_connection(database)
     

@@ -103,7 +103,6 @@ class ExtractionSerializer(serializers.ModelSerializer):
             if 'start_time' in validated_data and use_time:
                 start_time = validated_data.pop("start_time")
 
-
             time_made = timezone.now()
 
             results = {}
@@ -161,7 +160,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
                                 SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table_query_name} 
                                 { f"WHERE { time_field.first().name } >= ?" if start_time and time_field.exists() and use_time else "" }
                                 """
-                                
+
                                 try:
                                     rows = cursor.execute(query, start_time) if start_time and time_field.exists() and use_time else cursor.execute(query)
 

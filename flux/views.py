@@ -1,5 +1,7 @@
+from heapq import merge
 import json
 import logging
+import psycopg
 import pyodbc
 import re
 
@@ -10,6 +12,7 @@ from django.utils.translation import gettext as _
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from core.functions import get_create_temporary_table_query, get_dbms_booleans, get_temporary_table_name
 
 from flux import serializers
 
@@ -90,6 +93,8 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                 if database_record.exists():
                     database_record = database_record.first()
                     connection = get_database_connection(database_record)
+                    
+                    dbms_booleans = get_dbms_booleans(database_record)
 
                     flag = True
 
@@ -122,98 +127,102 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                         else:
                                             item: dict = dictionary[dictionary_key]
                                             
-                                            tables = ferdolt_models.Table.objects.filter( schema__database=database_record )
-                                            
-                                            # we write and delete in levels in order to avoid integrity constraint errors
-                                            levels = [
-                                                set( ['categories', 'brands', 'customers', 'stores', 'sales_order_items_deletion'] ),
-                                                set( ['staffs', 'products', 'sales_orders_deletion', 'production_stocks_deletion'] ),
-                                                set( [ 'orders', 'stocks', 'sales_staffs_deletion', 'production_products_deletion' ] ),
-                                                set( ['order_items', 'production_categories_deletion', 'production_brands_deletion', 'sales_customers_deletion', 'sales_stores_deletion' ] )
-                                            ]
+                                            # we order by levels (ascending) in order to avoid integrity errors
+                                            # tables with the lowest levels are those with the least number of foreign key relationships
+                                            # it's also not just about number but the depth of those relationships i.e. Child -> Parent -> Grand parent -> Adam in this case the child's level is 3
+                                            tables = ferdolt_models.Table.objects.filter( Q(schema__database=database_record) & ~Q(name__icontains='_deletion') ).order_by('level')
 
-                                            for level in levels:
-                                                level_tables = tables.filter(name__in=level)
+                                            for table in tables:
+                                                table_name = table.name.lower()
+                                                schema_name = table.schema.name.lower()
+                                                
+                                                # check if this table exists in the synchronization file and if there are any records to apply
+                                                if schema_name in item.keys() and table_name in item[schema_name].keys() and item[schema_name][table_name]:
+                                                    table_rows = item[schema_name][table_name]
+                                                    table_columns = [
+                                                        f["name"] for f in table.column_set.values("name") if f["name"] in table_rows[0].keys()
+                                                    ]
+                                                    primary_key_columns = [
+                                                        f["name"] for f in table.column_set.filter(columnconstraint__is_primary_key=True).values("name")
+                                                    ]
 
-                                                logging.debug(f"[In flux.views.SynchronizationViewSet.create], the tables found in database {database_record.name} are {str(tables)}")
+                                                    temporary_table_name = f"{schema_name}_{table_name}_temporary_table"
+                                                    temporary_table_actual_name = get_temporary_table_name(database_record, temporary_table_name)
 
-                                                for table in level_tables:
-                                                    table_name = table.name.lower()
-                                                    schema_name = table.schema.name.lower()
-                                                    
-                                                    # check if this table exists in the synchronization file and if there are any records to apply
-                                                    if schema_name in item.keys() and table_name in item[schema_name].keys() and item[schema_name][table_name]:
-                                                        table_rows = item[schema_name][table_name]
-                                                        table_columns = [
-                                                            f["name"] for f in table.column_set.values("name") if f["name"] in table_rows[0].keys()
-                                                        ]
-                                                        primary_key_columns = [
-                                                            f["name"] for f in table.column_set.filter(columnconstraint__is_primary_key=True).values("name")
-                                                        ]
-
-                                                        temporary_table_name = f"##{schema_name}_{table_name}_temporary_table"
+                                                    try:
+                                                        # we create the temporary table only once and use the same table for each of the unapplied files
+                                                        if not temporary_table_created_flag:
+                                                            create_temporary_table_query = get_create_temporary_table_query( database_record, temporary_table_name,  f"( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )" )
+                                                            
+                                                            cursor.execute(create_temporary_table_query)
+                                                            temporary_table_created_flag = True
+                                                            breakpoint()
 
                                                         try:
-                                                            # we create the temporary table only once and use the same table for each of the unapplied files
-                                                            if not temporary_table_created_flag:
-                                                                create_temporary_table_query = f"""
-                                                                CREATE TABLE {temporary_table_name} ( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )
-                                                                """
-                                                                cursor.execute(create_temporary_table_query)
-                                                                temporary_table_created_flag = True
-
+                                                            # emptying the temporary table in case of previous data
                                                             try:
+                                                                cursor.execute(f"DELETE FROM {temporary_table_actual_name}")
+                                                            except pyodbc.ProgrammingError as e:
+                                                                logging.error(f"Error deleting from the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                                                                connection.rollback()
 
-                                                                try:
-                                                                    cursor.execute(f"DELETE FROM {temporary_table_name}")
-                                                                except pyodbc.ProgrammingError as e:
-                                                                    logging.error(f"Error deleting from the temporary table {temporary_table_name}. Error: {str(e)}")
-                                                                    connection.rollback()
+                                                            insert_into_temporary_table_query = f"""
+                                                            INSERT INTO {temporary_table_actual_name} ( { ', '.join( [ column for column in table_columns ] ) } ) VALUES ( { ', '.join( [ '?' if isinstance(cursor, pyodbc.Cursor) else '%s'  for _ in table_columns ] ) } );
+                                                            """
+                                                            breakpoint()
+                                                            rows_to_insert = []
 
-                                                                insert_into_temporary_table_query = f"""
-                                                                INSERT INTO {temporary_table_name} ( { ', '.join( [ column for column in table_columns ] ) } ) VALUES ( { ', '.join( [ '?' for _ in table_columns ] ) } );
-                                                                """
+                                                            # getting the list of tables for bulk insert
+                                                            for row in table_rows:
+                                                                rows_to_insert.append( tuple(
+                                                                    row[f] for f in table_columns
+                                                                ) )
 
-                                                                rows_to_insert = []
-
-                                                                # getting the list of tables for bulk insert
-                                                                for row in table_rows:
-                                                                    rows_to_insert.append( tuple(
-                                                                        row[f] for f in table_columns
-                                                                    ) )
-
-                                                                cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
-
+                                                            cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
+                                                            breakpoint()
+                                                            if dbms_booleans['is_sqlserver_db']:
                                                                 # set identity_insert on to be able to explicitly write values for identity columns
                                                                 try:
                                                                     cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} ON")
                                                                 except pyodbc.ProgrammingError as e:
                                                                     logging.error(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
 
-                                                                merge_query = None
+                                                            merge_query = None
 
-                                                                if not deletion_table_regex.search(table_name):
+                                                            if not deletion_table_regex.search(table_name):
+                                                                merge_query = ""
+
+                                                                if dbms_booleans["is_sqlserver_db"]:
                                                                     merge_query = f"""
-                                                                    merge {schema_name}.{table_name} as t USING {temporary_table_name} AS s ON (
-                                                                        {
-                                                                            ' AND '.join(
-                                                                            [ f"t.{column} = s.{column}" for column in primary_key_columns ] )
-                                                                        }
-                                                                    ) 
-                                                                    when matched and t.last_updated < s.last_updated then 
-                                                                    update set {
-                                                                        ' , '.join(
-                                                                            [ f"{column} = s.{column}" for column in table_columns if column not in primary_key_columns ] )
+                                                                merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
+                                                                    {
+                                                                        ' AND '.join(
+                                                                        [ f"t.{column} = s.{column}" for column in primary_key_columns ] )
                                                                     }
+                                                                ) 
+                                                                when matched and t.last_updated < s.last_updated then 
+                                                                update set {
+                                                                    ' , '.join(
+                                                                        [ f"{column} = s.{column}" for column in table_columns if column not in primary_key_columns ] )
+                                                                }
 
-                                                                    when not matched then 
-                                                                        insert ( { ', '.join( [ column for column in table_columns ] ) } ) values ( { ', '.join( [ f"s.{column}" for column in table_columns ] ) } )
-                                                                    ;
+                                                                when not matched then 
+                                                                    insert ( { ', '.join( [ column for column in table_columns ] ) } ) values ( { ', '.join( [ f"s.{column}" for column in table_columns ] ) } )
+                                                                ;
+                                                                """
+                                                            
+                                                                elif dbms_booleans['is_postgres_db']:
+                                                                    merge_query = f"""
+                                                                    INSERT INTO {schema_name}.{table_name} (SELECT * FROM {temporary_table_actual_name}) 
+                                                                    ON CONFLICT ( { ', '.join( [ column for column in primary_key_columns ] ) } )
+                                                                    DO 
+                                                                        UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) }
                                                                     """
-                                                                else:
-                                                                    if len(primary_key_columns) == 1:
+                                                            else:
+                                                                if len(primary_key_columns) == 1:
+                                                                    if dbms_booleans["is_sqlserver_db"]:
                                                                         merge_query = f"""
-                                                                        merge {schema_name}.{table_name} as t USING {temporary_table_name} AS s ON (
+                                                                        merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
                                                                             {
                                                                                 f"t.{primary_key_columns[0]} = s.row_id"
                                                                             }
@@ -221,19 +230,30 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                                         when matched then 
                                                                         delete
                                                                         """
-                                                                    else:
-                                                                        logging.error(f"Could not delete from {table.__str__()} table as it has a composite primary key")
+                                                                    elif dbms_booleans["is_postgres_db"]:
+                                                                        merge_query = f"""
+                                                                        DELETE FROM {schema_name}.{table_name} WHERE { 
+                                                                            ' AND, '.join(
+                                                                                f"{column} IN (SELECT {column} FROM {temporary_table_actual_name})" 
+                                                                                for column in primary_key_columns
+                                                                            )
+                                                                         }
+                                                                        """
+                                                                else:
+                                                                    logging.error(f"Could not delete from {table.__str__()} table as it has a composite primary key")
 
-                                                                # execute merge query
-                                                                # merge is used to either insert update or do nothing based on certain conditions
-                                                                try:
-                                                                    if merge_query:
-                                                                        cursor.execute(merge_query)
-                                                                except pyodbc.ProgrammingError as e:
-                                                                    logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
-                                                                    cursor.connection.rollback()
-                                                                    flag = False
+                                                            # execute merge query
+                                                            # merge is used to either insert update or do nothing based on certain conditions
+                                                            try:
+                                                                if merge_query:
+                                                                    cursor.execute(merge_query)
+                                                                    breakpoint()
+                                                            except pyodbc.ProgrammingError as e:
+                                                                logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
+                                                                cursor.connection.rollback()
+                                                                flag = False
 
+                                                            if dbms_booleans['is_sqlserver_db']:
                                                                 # set identity_insert off as only one table can have identity_insert on per session
                                                                 # if we don't set it off for this table, no other table will be able to have identity_insert on
                                                                 try:
@@ -243,15 +263,21 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                                     connection.rollback()
                                                                     flag = False
 
-                                                            except pyodbc.ProgrammingError as e:
-                                                                logging.error(f"Error inserting into temporary table {temporary_table_name}. Error encountered: {str(e)}")
-                                                                cursor.connection.rollback()
-                                                                flag = False
-
                                                         except pyodbc.ProgrammingError as e:
-                                                            logging.error(f"Error creating the temporary table {temporary_table_name}. Error: {str(e)}")
+                                                            logging.error(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
                                                             cursor.connection.rollback()
                                                             flag = False
+                                                        
+                                                        except psycopg.ProgrammingError as e:
+                                                            logging.error(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
+                                                            breakpoint()
+                                                            cursor.connection.rollback()
+                                                            flag = False
+
+                                                    except pyodbc.ProgrammingError as e:
+                                                        logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                                                        cursor.connection.rollback()
+                                                        flag = False
 
                                             if flag:
                                                 synchronized_databases.append(database_record)
