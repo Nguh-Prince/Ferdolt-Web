@@ -1,9 +1,10 @@
-from heapq import merge
 import json
 import logging
 import psycopg
 import pyodbc
 import re
+
+from cryptography.fernet import Fernet
 
 from django.db.models import Q
 from django.utils import timezone
@@ -12,14 +13,17 @@ from django.utils.translation import gettext as _
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from core.functions import get_create_temporary_table_query, get_dbms_booleans, get_temporary_table_name
+from rest_framework.serializers import ValidationError
 
 from flux import serializers
 
 from . import models
 from .serializers import SynchronizationSerializer
 
+from core.functions import get_create_temporary_table_query, get_dbms_booleans, get_temporary_table_name
+
 from ferdolt import models as ferdolt_models
+from ferdolt_web.settings import FERNET_KEY
 from frontend.views import get_database_connection
 
 class FileViewSet(viewsets.ModelViewSet):
@@ -38,6 +42,17 @@ class ExtractionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return models.Extraction.objects.all()
+
+    def destroy(self, request, *args, **kwargs):
+        object = self.get_object()
+
+        file: models.File = object.file
+
+        if file:
+            file.file.delete()
+            file.delete()
+
+        return super().destroy(request, *args, **kwargs)
 
 def get_type_and_precision(column_name, column_dictionary) -> str:
     string = f"{column_name} "
@@ -81,6 +96,8 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
 
         logging.info("[In flux.views.SynchronizationViewSet.create]")
 
+        f = Fernet(FERNET_KEY)
+
         if 'use_pentaho' not in validated_data or not validated_data['use_pentaho']:
             databases = validated_data.pop("synchronizationdatabase_set")
 
@@ -104,18 +121,20 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                         # get the list of files (not extracted from this database) that have not been applied on the database
                         unapplied_files = models.File.objects.filter(~Q(id__in=database_record.synchronizationdatabase_set.values("synchronization__file__id") ) & ~Q(id__in=database_record.extractiondatabase_set.values("extraction__file__id")) )
 
-                        temporary_table_created_flag = False
+                        temporary_tables_created = set([])
 
                         for file in unapplied_files:
                             file_path = file.file.path
 
                             try:
-                                with open( file_path ) as _:
-                                    content = _.read()
+                                with open( file_path ) as __:
+                                    content = __.read()
+                                    content = f.decrypt( bytes(content, 'utf-8') )
+                                    content = content.decode('utf-8')
+
                                     logging.debug("[In flux.views.SynchronizationViewSet.create] reading the unapplied synchronization file")
                                     try:
                                         dictionary: dict = json.loads(content)
-                                        
                                         # if there is more than one key in the extraction file check if a key with the database's name exists in the file
                                         dictionary_key = list(dictionary.keys())[0] if len(dictionary.keys()) == 1 else None
 
@@ -151,12 +170,12 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
 
                                                     try:
                                                         # we create the temporary table only once and use the same table for each of the unapplied files
-                                                        if not temporary_table_created_flag:
+                                                        if temporary_table_actual_name not in temporary_tables_created:
+                                                            print(f"Creating the {temporary_table_actual_name} temp table")
                                                             create_temporary_table_query = get_create_temporary_table_query( database_record, temporary_table_name,  f"( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )" )
                                                             
                                                             cursor.execute(create_temporary_table_query)
-                                                            temporary_table_created_flag = True
-                                                            breakpoint()
+                                                            temporary_tables_created.add( temporary_table_actual_name )
 
                                                         try:
                                                             # emptying the temporary table in case of previous data
@@ -169,7 +188,6 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                             insert_into_temporary_table_query = f"""
                                                             INSERT INTO {temporary_table_actual_name} ( { ', '.join( [ column for column in table_columns ] ) } ) VALUES ( { ', '.join( [ '?' if isinstance(cursor, pyodbc.Cursor) else '%s'  for _ in table_columns ] ) } );
                                                             """
-                                                            breakpoint()
                                                             rows_to_insert = []
 
                                                             # getting the list of tables for bulk insert
@@ -179,7 +197,10 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                                 ) )
 
                                                             cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
-                                                            breakpoint()
+
+                                                            if table.level == 0:
+                                                                breakpoint()
+
                                                             if dbms_booleans['is_sqlserver_db']:
                                                                 # set identity_insert on to be able to explicitly write values for identity columns
                                                                 try:
@@ -241,17 +262,32 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                                         """
                                                                 else:
                                                                     logging.error(f"Could not delete from {table.__str__()} table as it has a composite primary key")
+                                                            select_all_query = f"SELECT * FROM {schema_name}.{table_name}"
 
                                                             # execute merge query
                                                             # merge is used to either insert update or do nothing based on certain conditions
                                                             try:
                                                                 if merge_query:
                                                                     cursor.execute(merge_query)
+                                                                if table.level > 1 or table.name == 'stores' or table.name == 'brands':
                                                                     breakpoint()
                                                             except pyodbc.ProgrammingError as e:
                                                                 logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
                                                                 cursor.connection.rollback()
                                                                 flag = False
+                                                            except psycopg.ProgrammingError as e:
+                                                                logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
+                                                                cursor.connection.rollback()
+                                                                flag = False
+                                                            except pyodbc.IntegrityError as e:
+                                                                logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
+                                                                cursor.connection.rollback()
+                                                                flag = False
+                                                            except psycopg.IntegrityError as e:
+                                                                logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
+                                                                cursor.connection.rollback()
+                                                                flag = False
+                                                                
 
                                                             if dbms_booleans['is_sqlserver_db']:
                                                                 # set identity_insert off as only one table can have identity_insert on per session
@@ -270,7 +306,6 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                         
                                                         except psycopg.ProgrammingError as e:
                                                             logging.error(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
-                                                            breakpoint()
                                                             cursor.connection.rollback()
                                                             flag = False
 
@@ -294,9 +329,9 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                 logging.error( f"[In flux.views.SynchronizationViewSet.create]. Error opening file for database synchronization. File path: {file_path}" )
 
                     else:
-                        raise serializers.ValidationError( _("Invalid connection parameters") )
+                        raise ValidationError( _("Invalid connection parameters") )
                 else:
-                    raise serializers.ValidationError( _("No database exists with id %(id)s" % {'id': id}) )    
+                    raise ValidationError( _("No database exists with id %(id)s" % {'id': database['database']['id'] }) )
 
             if synchronized_databases:
                 # record the synchronization
@@ -309,7 +344,6 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
 
             else:
                 logging.error("No synchronizations were applied")
-                breakpoint()
         
         return Response( data=SynchronizationSerializer(synchronizations, many=True).data )
 

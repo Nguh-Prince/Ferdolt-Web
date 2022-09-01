@@ -5,22 +5,21 @@ import datetime as dt
 
 import pyodbc
 
-from rest_framework import serializers, status
-from rest_framework.response import Response
+from cryptography.fernet import Fernet
 
-from . import models
 from django.core.files import File
 from django.db.models import Q
 from django.utils.translation import gettext as _
 from django.utils import timezone
 
-from frontend.views import get_database_connection
-
-from ferdolt import models as ferdolt_models
-
-from ferdolt_web import settings
+from rest_framework import serializers, status
+from rest_framework.response import Response
 
 from core.functions import custom_converter, extract_raw
+from . import models
+from frontend.views import get_database_connection
+from ferdolt import models as ferdolt_models
+from ferdolt_web import settings
 
 class FluxDatabaseSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source="database.id")
@@ -92,6 +91,8 @@ class ExtractionSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        f = Fernet(settings.FERNET_KEY)
+
         if 'use_pentaho' not in validated_data or not validated_data['use_pentaho']:
             databases = validated_data.pop("extractiondatabase_set")
 
@@ -180,14 +181,19 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
             filename = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}.json" )
 
-            with open( filename, "a+" ) as _:
-                _.write( json.dumps( results, default=custom_converter ) )
-                file = models.File.objects.create( file=File( _, name=os.path.basename( filename ) ), size=os.path.getsize(filename), is_deleted=False )
+            with open( filename, "a+" ) as file:
+                json_string = json.dumps( results, default=custom_converter )
+                token = f.encrypt( bytes(json_string, 'utf-8') )
+
+                file.write( token.decode('utf-8') )
+                file = models.File.objects.create( file=File( file, name=os.path.basename( filename ) ), size=os.path.getsize(filename), is_deleted=False )
 
                 extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
 
                 for database in database_records:
                     models.ExtractionDatabase.objects.create( database=database, extraction=extraction )
+            
+            os.unlink( filename )
 
             return extraction
 

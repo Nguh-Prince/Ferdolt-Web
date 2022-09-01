@@ -128,7 +128,6 @@ def databases(request, id: int=None):
                                                 ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_foreign_key=True)
 
                 else:
-                    breakpoint()
                     return HttpResponse(f"Error connecting to {database.__str__()} database")
     return render(request, "frontend/databases.html", context={'database': database})
 

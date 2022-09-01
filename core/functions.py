@@ -1,7 +1,10 @@
 import logging
 from multiprocessing.sharedctypes import Value
 
+from django.db.utils import IntegrityError
+
 import psycopg
+from core.exceptions import InvalidDatabaseConnectionParameters
 
 from ferdolt import models as ferdolt_models
 from flux import models as flux_models
@@ -71,7 +74,7 @@ def get_create_temporary_table_query(database, temporary_table_name, columns_and
     dbms_name = database.dbms_version.dbms.name
 
     if sql_server_regex.search(dbms_name):
-        return f"CREATE ##{temporary_table_name} {columns_and_datatypes_string}"
+        return f"CREATE TABLE #{temporary_table_name} {columns_and_datatypes_string}"
 
     if postgresql_regex.search(dbms_name):
         return f"CREATE TEMP TABLE {temporary_table_name} {columns_and_datatypes_string}"
@@ -84,7 +87,7 @@ def get_temporary_table_name(database, temporary_table_name: str):
     string = ''
 
     if sql_server_regex.search(dbms_name):
-        return f"##{temporary_table_name}"
+        return f"#{temporary_table_name}"
 
     if postgresql_regex.search(dbms_name):
         return f"{temporary_table_name}"
@@ -165,3 +168,166 @@ def get_column_datatype(is_postgres, is_sqlserver, is_mysql, data_type_string: s
             return 'char'
     
     return data_type_string
+
+def get_table_foreign_key_references(table: ferdolt_models.Table):
+    is_postgres_db, is_sqlserver_db, is_mysql_db = False, False, False
+
+    database = table.schema.database
+
+    connection = get_database_connection(database)
+
+    if connection:
+        cursor = connection.cursor()
+
+        dbms_booleans = get_dbms_booleans(database)
+
+        query = None
+
+        if dbms_booleans["is_sqlserver_db"]:
+            query = f"""
+                    select OBJECT_NAME(fks.referenced_object_id) table_name, 
+                    sc2.name schema_name, COL_NAME(fks.referenced_object_id, fc2.referenced_column_id) column_name, 
+                    COL_NAME(fks.parent_object_id, fc.parent_column_id) referencing_column 
+                    FROM sys.foreign_keys fks 
+                    LEFT JOIN sys.tables tab ON referenced_object_id = tab.object_id 
+                    LEFT JOIN sys.schemas sc2 ON tab.schema_id = sc2.schema_id 
+                    LEFT JOIN sys.foreign_key_columns fc ON fks.object_id = fc.constraint_object_id 
+                    LEFT JOIN sys.foreign_key_columns fc2 ON fks.object_id = fc2.constraint_object_id
+                    WHERE fks.parent_object_id=object_id('{table.schema.name}.{table.name}')
+            """
+        if query:
+            rows = cursor.execute(query)
+            columns = [ column[0] for column in cursor.description ]
+
+            for row in rows:
+                record = dict( zip( columns, row ) )
+
+                try:
+                    referenced_column = ferdolt_models.Column.objects.get( table__schema__database=database, table__name__iexact=record["table_name"], 
+                    name__iexact=record["column_name"] )
+
+                    try:
+                        referencing_column = ferdolt_models.Column.objects.get( table=table, name__iexact=record["referencing_column"] ) 
+
+                        constraint = ferdolt_models.ColumnConstraint.objects.get_or_create( column=referencing_column, is_foreign_key=True, defaults={'is_primary_key': False} )
+
+                        constraint
+                        constraint[0].references = referenced_column
+                        constraint[0].save()
+
+                        logging.info(f"Successfully { 'created' if constraint[1] else 'modified' } the foreign key constraint")
+
+                    except ferdolt_models.Column.DoesNotExist as e:
+                        logging.error(f"Couldn't find the {record['column_name']} column in the {record['table_name']} table")
+                    
+                    except IntegrityError as e:
+                        logging.error(f"Error adding foreign key constraint on {table.name}{record['referencing_column']} to {record['table_name']}.{record['column_name']}. Error: {str(e)}")
+
+                    except ferdolt_models.Column.MultipleObjectsReturned as e:
+                        logging.error(f"Multiple {record['column_name']} columns in the {record['table_name']} table")
+
+                except ferdolt_models.Column.DoesNotExist as e:
+                    logging.error(f"Couldn't find the {record['column_name']} column in the {record['table_name']} table")
+
+
+def get_database_details( database ):
+    is_postgres_db, is_sqlserver_db, is_mysql_db = False, False, False
+
+    connection = get_database_connection(database)
+
+    if connection:
+        cursor = connection.cursor()
+
+        dbms_name = database.dbms_version.dbms.name
+
+        if sql_server_regex.search(dbms_name):
+            query = """
+                SELECT T.TABLE_NAME, T.TABLE_SCHEMA, C.COLUMN_NAME, C.DATA_TYPE, 
+                C.CHARACTER_MAXIMUM_LENGTH, C.DATETIME_PRECISION, C.NUMERIC_PRECISION, C.IS_NULLABLE, TC.CONSTRAINT_TYPE 
+                FROM INFORMATION_SCHEMA.TABLES T LEFT JOIN 
+                INFORMATION_SCHEMA.COLUMNS C ON C.TABLE_NAME = T.TABLE_NAME AND T.TABLE_SCHEMA = C.TABLE_SCHEMA 
+                LEFT JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE CU ON 
+                CU.COLUMN_NAME = C.COLUMN_NAME AND CU.TABLE_NAME = C.TABLE_NAME AND CU.TABLE_SCHEMA = C.TABLE_SCHEMA LEFT JOIN 
+                INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC ON TC.CONSTRAINT_NAME = CU.CONSTRAINT_NAME 
+                WHERE T.TABLE_TYPE = 'BASE TABLE' ORDER BY T.TABLE_SCHEMA, T.TABLE_NAME
+            """
+            is_sqlserver_db = True
+
+        if postgresql_regex.search(dbms_name):
+            query = """
+                SELECT T.TABLE_NAME, T.TABLE_SCHEMA, C.COLUMN_NAME, C.DATA_TYPE, 
+                C.CHARACTER_MAXIMUM_LENGTH, C.DATETIME_PRECISION, C.NUMERIC_PRECISION, C.IS_NULLABLE, TC.CONSTRAINT_TYPE 
+                FROM INFORMATION_SCHEMA.TABLES T LEFT JOIN 
+                INFORMATION_SCHEMA.COLUMNS C ON C.TABLE_NAME = T.TABLE_NAME AND T.TABLE_SCHEMA = C.TABLE_SCHEMA 
+                LEFT JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE CU ON 
+                CU.COLUMN_NAME = C.COLUMN_NAME AND CU.TABLE_NAME = C.TABLE_NAME AND CU.TABLE_SCHEMA = C.TABLE_SCHEMA LEFT JOIN 
+                INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC ON TC.CONSTRAINT_NAME = CU.CONSTRAINT_NAME 
+                WHERE T.TABLE_TYPE = 'BASE TABLE' AND NOT T.TABLE_SCHEMA = 'pg_catalog' AND NOT T.TABLE_SCHEMA = 'information_schema' 
+                ORDER BY T.TABLE_SCHEMA, T.TABLE_NAME
+            """
+            is_postgres_db = True
+
+        if query:
+            results = cursor.execute(query)
+            columns = [ column[0].lower() for column in cursor.description ]
+
+            dictionary = {}
+
+            for row in results:
+                row_dictionary = dict( zip(columns, row) )
+                schema_dictionary = dictionary.setdefault(
+                    row_dictionary['table_schema'], {}
+                )
+                table_dictionary = schema_dictionary.setdefault(
+                    row_dictionary['table_name'], {}
+                )
+
+                column_dictionary = table_dictionary.setdefault(
+                row_dictionary['column_name'], {})
+
+                if not column_dictionary:
+                    column_dictionary = {
+                        'data_type': get_column_datatype(is_postgres=is_postgres_db, is_sqlserver=is_sqlserver_db, 
+                            is_mysql=is_mysql_db, data_type_string=row_dictionary['data_type']),
+                        'character_maximum_length': row_dictionary['character_maximum_length'],
+                        'datetime_precision': row_dictionary['datetime_precision'],
+                        'numeric_precision': row_dictionary['numeric_precision'],
+                        'constraint_type': set([row_dictionary['constraint_type']]),
+                        'is_nullable': row_dictionary['is_nullable'].lower() == 'yes'
+                    }
+                else:
+                    column_dictionary['constraint_type'].add( row_dictionary['constraint_type'] )
+
+                table_dictionary[row_dictionary['column_name']] = column_dictionary
+
+            for schema in dictionary.keys():
+                schema_record = ferdolt_models.DatabaseSchema.objects.get_or_create(name=schema.lower(), database=database)[0]
+                schema_dictionary = dictionary[schema]
+
+                for table in schema_dictionary.keys():
+                    table_record: ferdolt_models.Table = ferdolt_models.Table.objects.get_or_create(schema=schema_record, name=table.lower())[0]
+                    table_dictionary = schema_dictionary[table]
+
+                    for column in table_dictionary.keys():
+                        column_dictionary = table_dictionary[column]
+
+                        column_record = ferdolt_models.Column.objects.get_or_create(table=table_record, name=column, data_type=column_dictionary['data_type'], datetime_precision=column_dictionary['datetime_precision'], character_maximum_length=column_dictionary['character_maximum_length'], numeric_precision=column_dictionary['numeric_precision'], is_nullable=column_dictionary['is_nullable'])[0]
+
+                        column_record.columnconstraint_set.all().delete()
+
+                        for constraint in column_dictionary['constraint_type']:
+                            primary_key_regex = re.compile("primary key", re.I)
+                            foreign_key_regex = re.compile("foreign key", re.I)
+                            
+                            if constraint:
+                                if primary_key_regex.search(constraint):
+                                    ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_primary_key=True)
+                                
+                                if foreign_key_regex.search(constraint):
+                                    ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_foreign_key=True)
+
+                        get_table_foreign_key_references(table_record)
+
+
+    else:
+        raise InvalidDatabaseConnectionParameters("""Error connecting to the database. Check if the credentials are correct or if the database is running""")

@@ -1,8 +1,10 @@
+from tempfile import TemporaryFile
 from unittest import result
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
+from core.exceptions import InvalidDatabaseConnectionParameters
 from frontend import views
 from rest_framework import serializers as drf_serializers
 
@@ -14,7 +16,7 @@ from django.utils.translation import gettext as _
 from django.utils import timezone
 
 from common.viewsets import MultipleSerializerViewSet
-from core.functions import get_database_connection
+from core.functions import get_database_connection, get_database_details
 
 from . import serializers
 from . import  permissions
@@ -40,11 +42,26 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     serializer_class = serializers.DatabaseSerializer
 
     serializer_classes = {
-        'retrieve': serializers.DatabaseDetailSerializer
+        'retrieve': serializers.DatabaseDetailSerializer,
+        'refresh': serializers.DatabaseDetailSerializer,
     }
 
     def get_queryset(self):
         return models.Database.objects.all()
+
+    @action(
+        methods=['GET'], detail=True
+    )
+    def refresh(self, request, *args, **kwargs):
+        database = self.get_object()
+
+        try:
+            get_database_details(database)
+            serializer = self.get_serializer(database)
+
+            return Response( data=serializer.data )
+        except InvalidDatabaseConnectionParameters as e:
+            return Response( {'message': _("Error connecting to the database. Check if the credentials are correct or if the database is running")}, status=status.HTTP_400_BAD_REQUEST )
 
 class DatabaseSchemaViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.DatabaseSchemaSerializer

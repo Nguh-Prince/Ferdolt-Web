@@ -6,7 +6,7 @@ from ferdolt import models as ferdolt_models
 
 class GroupDatabase(models.Model):
     name = models.CharField(max_length=150)
-    database = models.ForeignKey(ferdolt_models.Database, on_delete=models.PROTECT)
+    database = models.ForeignKey(ferdolt_models.Database, on_delete=models.PROTECT, null=True)
     is_writeable = models.BooleanField(default=True) # set this to False if this server does not create data related to this group
     
     is_readable = models.BooleanField(default=True) # set this to False if this server does not integrate data from this group
@@ -24,7 +24,7 @@ class GroupDatabase(models.Model):
 
 class GroupTable(models.Model):
     name = models.CharField(max_length=100)
-    table = models.ForeignKey( ferdolt_models.Table, on_delete=models.PROTECT )
+    table = models.ForeignKey( ferdolt_models.Table, on_delete=models.PROTECT, null=True )
 
     class Meta:
         verbose_name = _("Group table")
@@ -33,5 +33,13 @@ class GroupTable(models.Model):
 class GroupColumn(models.Model):
     name = models.CharField(max_length=150)
     group_table = models.ForeignKey(GroupTable, on_delete=models.CASCADE)
-    column = models.ForeignKey(ferdolt_models.Column, on_delete=models.PROTECT)
+    column = models.ForeignKey(ferdolt_models.Column, on_delete=models.PROTECT, null=True)
     is_required = models.BooleanField(default=False)
+
+class GroupColumnConstraint(models.Model):
+    column = models.ForeignKey(GroupColumn, on_delete=models.CASCADE)
+    is_unique = models.BooleanField(default=False)
+    is_foreign_key = models.BooleanField(default=False)
+    is_primary_key = models.BooleanField(default=False)
+    references = models.ForeignKey(GroupColumn, on_delete=models.SET_NULL, 
+    null=True, blank=True, related_name='references')

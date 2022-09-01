@@ -98,11 +98,13 @@ class Table(models.Model):
             .values("references__table__id") 
         )
 
+        level = 0
+
         if not referenced_tables.exists():
             return 0
         else:
             for referenced_table in referenced_tables:
-                level = max( level, referenced_table.set_level )
+                level = max( level, referenced_table.get_level() )
 
         return level + 1
 
