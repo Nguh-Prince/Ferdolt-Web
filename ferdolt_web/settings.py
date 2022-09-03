@@ -68,6 +68,8 @@ ROOT_URLCONF = 'ferdolt_web.urls'
 
 FERNET_KEY = 'kXTmzsvlLlvhiTTGWWn4yhGZi143jZUisNC_X8BINO0='
 
+APPEND_SLASH = False
+
 try: 
     FERNET_KEY = env("FERNET_KEY")
 except KeyError as e:

@@ -8,6 +8,7 @@ class NestedDefaultRouter(NestedRouterMixin, routers.DefaultRouter):
 
 router = NestedDefaultRouter()
 
-group_routes = router.register("groups", views.GroupDatabaseViewSet, basename="groups")
+group_routes = router.register("", 
+views.GroupViewSet, basename="groups")
 
 urlpatterns = router.urls

@@ -99,6 +99,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
             start_time = None
             
             # set use_time to False if it is passed as False else True
+            # use_time is set to False if the user doesn't want to select rows from the tables based on time i.e. WHERE last_updated > start_time
             use_time = not ( 'use_time' in validated_data and not validated_data['use_time'] )
 
             if 'start_time' in validated_data and use_time:
@@ -171,9 +172,9 @@ class ExtractionSerializer(serializers.ModelSerializer):
                                         row_dictionary = dict( zip( columns, row ) )
                                         table_results.append(row_dictionary)
                                 except pyodbc.ProgrammingError as e:
-                                    print(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
+                                    logging.error(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
                                     raise e
-                      
+                    
                     else:
                         raise serializers.ValidationError( _("Invalid connection parameters") )
                 else:

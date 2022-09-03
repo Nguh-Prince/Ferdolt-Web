@@ -97,7 +97,7 @@ class DatabaseDetailSerializer(DatabaseSerializer):
             class DatabaseTableColumns(serializers.ModelSerializer):
                 class Meta:
                     model = models.Column
-                    fields = ( "name", )
+                    fields = ( "id", "name", )
             
             columns = DatabaseTableColumns(many=True, allow_null=True, required=False, source="column_set")
             class Meta:
@@ -158,7 +158,7 @@ class TableSerializer(serializers.ModelSerializer):
 class ColumnSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Column
-        fields = ( "table", "name", "data_type", "datetime_precision", "character_maximum_length", "numeric_precision" )
+        fields = ( "id", "table", "name", "data_type", "datetime_precision", "character_maximum_length", "numeric_precision" )
 
 class ColumnConstraintSerializer(serializers.ModelSerializer):
     class Meta:
