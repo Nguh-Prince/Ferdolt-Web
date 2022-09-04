@@ -45,6 +45,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         detail=True
     )
     def extract(self, request, *args, **kwargs):
+        # extraction is done from one database but synchronization is done for all the databases
         group = self.get_object()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -172,6 +173,8 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         detail=True
     )
     def synchronize(self, request, *args, **kwargs):
+        group = self.get_object()
+
         pass
 
     @action(

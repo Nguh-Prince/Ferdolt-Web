@@ -1,11 +1,12 @@
-from django.db import models
-from django.utils.translation import gettext as _
 from django.core.exceptions import ValidationError
-
-from ferdolt import models as ferdolt_models
-from flux.models import Extraction
+from django.db import models
+from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from slugify import slugify
+
+from ferdolt import models as ferdolt_models
+from flux.models import Extraction, Synchronization
 
 class Group(models.Model):
     name = models.CharField(unique=True, max_length=50)
@@ -71,4 +72,21 @@ class GroupColumnConstraint(models.Model):
 class GroupExtraction(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
-    source_database = models.ForeignKey(GroupDatabase, on_delete=models.CASCADE)
+    source_database = models.ForeignKey(GroupDatabase, on_delete=models.SET_NULL, null=True)
+
+class GroupDatabaseSynchronization(models.Model):
+    group_database = models.ForeignKey(GroupDatabase, on_delete=models.CASCADE)
+    extraction = models.ForeignKey( GroupExtraction, on_delete=models.CASCADE )
+    is_applied = models.BooleanField( default=False )
+    time_applied = models.DateTimeField( null=True )
+
+    class Meta:
+        unique_together = [
+            ["group_database", "extraction"]
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.is_applied and not self.time_applied:
+            self.time_applied = timezone.now()
+
+        return super().save(*args, **kwargs)
