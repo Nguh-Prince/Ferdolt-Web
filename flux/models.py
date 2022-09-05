@@ -1,3 +1,6 @@
+from hashlib import sha256
+import logging
+
 from django.db import models
 
 from ferdolt import models as ferdolt_models
@@ -8,6 +11,19 @@ class File(models.Model):
     is_deleted = models.BooleanField(default=False)
     last_modified_time = models.DateTimeField(null=True)
     hash = models.TextField( null=True, blank=True )
+
+    def save(self, *args, **kwargs):
+        file_path = self.file.path
+
+        try: 
+            with open( file_path ) as __:
+                content = __.read()
+                self.hash = sha256( content.encode('utf-8') ).hexdigest()
+
+        except FileNotFoundError as e:
+            logging.error(f"Couldn't set hash for {file_path} because the file was not found")
+        
+        super().save(*args, **kwargs)
 
 class Extraction(models.Model):
     time_made = models.DateTimeField()

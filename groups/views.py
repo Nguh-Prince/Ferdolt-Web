@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 import logging
 import os
 import re
@@ -28,6 +29,7 @@ from ferdolt import models as ferdolt_models
 from flux.models import Extraction, File
 from flux.serializers import ExtractionSerializer
 from flux.views import get_column_dictionary, get_type_and_precision
+from frontend.views import synchronizations
 from . import models, serializers
 
 deletion_table_regex = re.compile("_deletion$")
@@ -95,19 +97,17 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
                     for table in group.tables.all():
                         # get the groupcolumns linked to the columns of tables in the source database
-                        actual_database_tables = models.GroupColumnColumn.objects.filter( 
-                            group_column__group_table=table, column__table__schema__database=source.database
-                        ).values(
-                            "column__table__name", "column__table__schema__name", "column__table__id"
-                        ).annotate(Count("column__table__name"))
                         
                         actual_database_tables = ferdolt_models.Table.objects.filter(
                             schema__database=source.database, id__in=models.GroupColumnColumn.objects
                                 .filter(group_column__group_table=table)
                                 .values("column__table__id")
                             ).distinct()
+
+                        actual_database_tables = ferdolt_models.Table.objects.filter( id__in=table.grouptabletable_set.values("table__id") )
                         
                         table_dictionary = {}
+                        breakpoint()
 
                         for item in actual_database_tables:
                             table_results = []
@@ -145,7 +145,8 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                             except psycopg.ProgrammingError as e:
                                 logging.error(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
                                 raise e
-
+                        
+                        breakpoint()
                         if table_dictionary.keys():
                             group_dictionary.setdefault( table.name.lower(), table_dictionary )
                             
@@ -153,21 +154,23 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                             "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}.json")
 
                             group_extraction = None
-
+                            breakpoint()
                             with open( file_name, "a+" ) as __:
                                 json_string = json.dumps( results, default=custom_converter )
                                 token = f.encrypt( bytes( json_string, 'utf-8' ) )
 
                                 __.write( token.decode('utf-8') )
                                 
-                                file = File.objects.create( file=DjangoFile( __, name=os.path.basename(file_name) ), size=os.path.getsize(file_name), is_deleted=False )
+                                file = File.objects.create( file=DjangoFile( __, name=os.path.basename(file_name) ), size=os.path.getsize(file_name), is_deleted=False, hash=sha256( token ).hexdigest() 
+                                )
 
                                 extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
 
                                 group_extraction = models.GroupExtraction.objects.create(group=group, extraction=extraction, source_database=source)              
 
                             os.unlink( file_name )
-            serializer = serializers.GroupExtractionSerializer(group_extraction)
+                            
+                            serializer = serializers.GroupExtractionSerializer(group_extraction)
 
             return Response( data=serializer.data, status=status.HTTP_201_CREATED )
 
@@ -195,7 +198,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
         for group_database_synchronization in models.GroupDatabaseSynchronization.objects.filter( group_database__group=group, is_applied=False ):
             # apply the synchronization for this database
-            file_path = group_database_synchronization.extraction.file.file.file.path
+            file_path = group_database_synchronization.extraction.extraction.file.file.path
 
             try:
                 with open( file_path ) as __:
@@ -207,7 +210,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
                     try:
                         # the keys of this dictionary are the group's tables
-                        dictionary: dict = json.loads(content, 'utf-8')
+                        dictionary: dict = json.loads(content)
 
                         for group_table_name in dictionary.keys():
                             try:
@@ -381,7 +384,16 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
         applied_synchronizations = models.GroupDatabaseSynchronization.objects.filter( group_database__group=group, is_applied=True )
 
-        return Response( data=serializers.GroupDatabaseSynchronizationSerializer( applied_synchronizations, many=True ) )
+        return Response( data=serializers.GroupDatabaseSynchronizationSerializer( applied_synchronizations, many=True ).data )
+
+    @action(
+        methods=['GET'],
+        detail=True
+    )
+    def synchronizations(self, request, *args, **kwargs):
+        synchronizations = models.GroupDatabaseSynchronization.objects.all()
+
+        return Response( serializers.GroupDatabaseSynchronizationSerializer(synchronizations, many=True).data )
 
     @action(
         methods=['PATCH'],

@@ -124,10 +124,10 @@ class GroupDatabaseSynchronizationSerializer(serializers.ModelSerializer):
             fields = ("database_id", "database_name", "database_host", "database_port")
 
     group_database = GroupDatabaseSerializer()
-    
+
     class Meta:
         model = models.GroupDatabaseSynchronization
-        fields = ("group_database", "extraction", "is_applied", "time_applied")
+        fields = ("id", "group_database", "extraction", "is_applied", "time_applied")
 
 class GroupSerializer(serializers.ModelSerializer):
     class GroupTableSimpleSerializer(serializers.ModelSerializer):
