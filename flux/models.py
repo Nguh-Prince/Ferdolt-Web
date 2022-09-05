@@ -7,6 +7,7 @@ class File(models.Model):
     size = models.FloatField(null=True)
     is_deleted = models.BooleanField(default=False)
     last_modified_time = models.DateTimeField(null=True)
+    hash = models.TextField( null=True, blank=True )
 
 class Extraction(models.Model):
     time_made = models.DateTimeField()

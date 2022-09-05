@@ -50,6 +50,10 @@ class GroupTable(models.Model):
     def column_count(self) -> int:
         return self.groupcolumn_set.count()
 
+class GroupTableTable(models.Model):
+    group_table = models.ForeignKey(GroupTable, on_delete=models.CASCADE)
+    table = models.ForeignKey( ferdolt_models.Table, on_delete=models.CASCADE )
+
 class GroupColumn(models.Model):
     name = models.CharField(max_length=150)
     group_table = models.ForeignKey(GroupTable, on_delete=models.CASCADE, related_name='columns')

@@ -113,6 +113,22 @@ class GroupExtractionSerializer(serializers.ModelSerializer):
         model = models.GroupExtraction
         fields = ( "id", "extraction", "group" ) 
 
+class GroupDatabaseSynchronizationSerializer(serializers.ModelSerializer):
+    class GroupDatabaseSerializer(serializers.ModelSerializer):
+        database_name = serializers.CharField( source="database.name" )
+        database_host = serializers.CharField( source="database.host" )
+        database_port = serializers.CharField( source="database.port" )
+
+        class Meta:
+            model = models.GroupDatabase
+            fields = ("database_id", "database_name", "database_host", "database_port")
+
+    group_database = GroupDatabaseSerializer()
+    
+    class Meta:
+        model = models.GroupDatabaseSynchronization
+        fields = ("group_database", "extraction", "is_applied", "time_applied")
+
 class GroupSerializer(serializers.ModelSerializer):
     class GroupTableSimpleSerializer(serializers.ModelSerializer):
         class Meta:

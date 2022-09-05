@@ -171,7 +171,7 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                     try:
                                                         # we create the temporary table only once and use the same table for each of the unapplied files
                                                         if temporary_table_actual_name not in temporary_tables_created:
-                                                            print(f"Creating the {temporary_table_actual_name} temp table")
+                                                            logging.info(f"Creating the {temporary_table_actual_name} temp table")
                                                             create_temporary_table_query = get_create_temporary_table_query( database_record, temporary_table_name,  f"( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )" )
                                                             
                                                             cursor.execute(create_temporary_table_query)
@@ -197,9 +197,6 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                                 ) )
 
                                                             cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
-
-                                                            if table.level == 0:
-                                                                breakpoint()
 
                                                             if dbms_booleans['is_sqlserver_db']:
                                                                 # set identity_insert on to be able to explicitly write values for identity columns
@@ -269,21 +266,11 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                             try:
                                                                 if merge_query:
                                                                     cursor.execute(merge_query)
-                                                                if table.level > 1 or table.name == 'stores' or table.name == 'brands':
-                                                                    breakpoint()
-                                                            except pyodbc.ProgrammingError as e:
+                                                            except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                                                 logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
                                                                 cursor.connection.rollback()
                                                                 flag = False
-                                                            except psycopg.ProgrammingError as e:
-                                                                logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
-                                                                cursor.connection.rollback()
-                                                                flag = False
-                                                            except pyodbc.IntegrityError as e:
-                                                                logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
-                                                                cursor.connection.rollback()
-                                                                flag = False
-                                                            except psycopg.IntegrityError as e:
+                                                            except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
                                                                 logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
                                                                 cursor.connection.rollback()
                                                                 flag = False
@@ -309,7 +296,7 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                             cursor.connection.rollback()
                                                             flag = False
 
-                                                    except pyodbc.ProgrammingError as e:
+                                                    except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                                         logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
                                                         cursor.connection.rollback()
                                                         flag = False
@@ -317,9 +304,6 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                             if flag:
                                                 synchronized_databases.append(database_record)
                                                 connection.commit()
-
-                                            else:
-                                                logging.info(f"[In flux.views.SynchronizationViewSet.create] the {schema_name} schema or the {table_name} table are not found in the synchronization file")
                                         
                                     except json.JSONDecodeError as e:
                                         logging.error( f"[In flux.views.SynchronizationViewSet.create]. Error parsing json from file for database synchronization. File path: {file_path}" )
