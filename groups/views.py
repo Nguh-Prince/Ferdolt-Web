@@ -76,6 +76,8 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
             results = {}
 
+            target_databases = validated_data.pop('target_databases')
+
             group_dictionary = results.setdefault( group.slug, {} )
 
             for database in databases:
@@ -166,7 +168,12 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
                                 extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
 
-                                group_extraction = models.GroupExtraction.objects.create(group=group, extraction=extraction, source_database=source)              
+                                group_extraction = models.GroupExtraction.objects.create(group=group, extraction=extraction, source_database=source)
+
+                                for database in target_databases:
+                                    models.GroupDatabaseSynchronization.objects.create(extraction=group_extraction, 
+                                        group_database=database, is_applied=False
+                                    )
 
                             os.unlink( file_name )
                             
@@ -195,6 +202,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         f = Fernet(FERNET_KEY)
         
         synchronized_databases = []
+        applied_synchronizations = []
 
         for group_database_synchronization in models.GroupDatabaseSynchronization.objects.filter( group_database__group=group, is_applied=False ):
             # apply the synchronization for this database
@@ -211,14 +219,18 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                     try:
                         # the keys of this dictionary are the group's tables
                         dictionary: dict = json.loads(content)
+                        dictionary = dictionary[group.slug]
+
+                        breakpoint()
 
                         for group_table_name in dictionary.keys():
                             try:
-                                group_table = models.GroupTable.objects.get( name__iexact=group_table_name )
+                                group_table = group.tables.get( name__iexact=group_table_name )
+                                breakpoint()
 
                                 # getting the database tables associated to this group_table
                                 group_table_tables = group_table.grouptabletable_set.all()
-                                group_table_columns = [ group_column for group_column in group_table.groupcolumn_set.all() if group_column.name.lower() in dictionary[group_table_name] ]
+                                group_table_columns = [ group_column for group_column in group_table.columns.all() if group_column.name.lower() in dictionary[group_table_name]['rows'][0] ]
 
                                 temporary_tables_created = set([])
 
@@ -230,25 +242,32 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
                                     database_record = table.schema.database
                                     connection = get_database_connection( database_record )
+                                    breakpoint()
 
                                     if connection:
                                         cursor = connection.cursor()
                                         dbms_booleans = get_dbms_booleans(database_record)
+                                        
+                                        breakpoint()
 
                                         table_columns = [ f["column__name"].lower() for f in models.GroupColumnColumn.objects.filter( group_column__in=group_table_columns, column__table=table ).values("column__name") ] 
+                                        
                                         primary_key_columns = [
                                             f["name"] for f in table.column_set.filter(columnconstraint__is_primary_key=True).values("name")
                                         ]
-                                        table_rows = dictionary[group_table_name]
+                                        table_rows = dictionary[group_table_name]['rows']
 
                                         temporary_table_name = f"{schema_name}_{table_name}_temporary_table"
                                         temporary_table_actual_name = get_temporary_table_name(database_record, temporary_table_name)
+                                    
+                                        create_temporary_table_query = get_create_temporary_table_query( 
+                                        database_record, temporary_table_name,  
+                                        f"( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )" 
+                                        )
 
                                         try:
                                             if temporary_table_actual_name not in temporary_tables_created:
                                                 logging.info(f"Creating the {temporary_table_actual_name} temp table")
-                                                create_temporary_table_query = get_create_temporary_table_query( 
-                                                    database_record, temporary_table_name,  f"( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )" )
                                                 
                                                 cursor.execute(create_temporary_table_query)
                                                 temporary_tables_created.add( temporary_table_actual_name )
@@ -266,11 +285,15 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                                 """
 
                                                 rows_to_insert = []
+                                                use_time = False
 
                                                 for row in table_rows:
                                                     rows_to_insert.append( tuple(
                                                         row[f.name.lower()] for f in group_table_columns
                                                     ) )
+                                                    if "last_updated" in row.keys():
+                                                        use_time = True
+
                                                 
                                                 cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
 
@@ -295,7 +318,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                                                     )
                                                                 }
                                                             )
-                                                            when matched and t.last_updated < s.last_updated then 
+                                                            when matched { " and t.last_updated < s.last_updated then " if use_time else ' ' } then 
                                                             update set {
                                                                 ', '.join(
                                                                     [ f"{column} = s.{column}" for column in table_columns if column not in primary_key_columns ]
@@ -305,6 +328,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                                             when not matched then 
                                                                 insert ( { ', '.join( [ column for column in table_columns ] ) } ) 
                                                                 values ( { ', '.join( [ f"s.{column}" for column in table_columns ] ) } )
+                                                            ;
                                                         """
 
                                                     elif dbms_booleans['is_postgres_db']:
@@ -314,6 +338,8 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                                         DO 
                                                             UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) }
                                                         """
+                                                    
+                                                    breakpoint()
                                                 else:
                                                     if len(primary_key_columns) == 1:
                                                         if dbms_booleans["is_postgres_db"]:
@@ -325,6 +351,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                                             ) 
                                                             when matched then 
                                                             delete
+                                                            ;
                                                             """
                                                         elif dbms_booleans['is_postgres_db']:
                                                             merge_query = f"""
@@ -343,16 +370,25 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                                         cursor.execute(merge_query)
                                                 except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                                     logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
+                                                    flag = False
                                                 except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
                                                     logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
                                                     cursor.connection.rollback()
                                                     flag = False
+                                                
+                                                if dbms_booleans['is_sqlserver_db']:
+                                                    # set identity_insert on to be able to explicitly write values for identity columns
+                                                    try:
+                                                        cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} OFF")
+                                                    except pyodbc.ProgrammingError as e:
+                                                        logging.error(f"Error occured when setting identity_insert off for {schema_name}.{table_name} table")
 
                                             except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                                 logging.error(f"Error inserting into the temporary table")
+                                                flag = False
 
                                         except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
-                                            logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                                            logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}.\nQuery: {create_temporary_table_query}")
                                             cursor.connection.rollback()
                                             flag = False
                                         
@@ -380,9 +416,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
             group_database_synchronization.is_applied = True
             group_database_synchronization.time_applied = timezone.now()
 
-            group_database_synchronization.save()
-
-        applied_synchronizations = models.GroupDatabaseSynchronization.objects.filter( group_database__group=group, is_applied=True )
+            applied_synchronizations.append( group_database_synchronization )
 
         return Response( data=serializers.GroupDatabaseSynchronizationSerializer( applied_synchronizations, many=True ).data )
 

@@ -103,10 +103,31 @@ class GroupDetailSerializer(serializers.ModelSerializer):
         model = models.Group
         fields = ("id", "name", "databases", "tables")
 
+class GroupDatabaseSerializer(serializers.ModelSerializer):
+    database_name = serializers.CharField( source="database.name", required=False )
+    database_host = serializers.CharField( source="database.host", required=False )
+    database_port = serializers.CharField( source="database.port", required=False )
+
+    class Meta:
+        model = models.GroupDatabase
+        fields = ("id", "database_id", "database_name", "database_host", "database_port")
+
+
 class ExtractFromGroupSerializer(serializers.ModelSerializer):
+    target_databases = GroupDatabaseSerializer( many=True, write_only=True, required=False, allow_empty=True )
+
     class Meta:
         model = models.GroupExtraction
-        fields = ( "source_database", )
+        fields = ( "source_database", "target_databases")
+
+    def validate(self, attrs):
+        group = attrs['source_database'].group
+        
+        # set the target_databases to all the databases in the group if no target_databases are passed
+        if 'target_databases' not in attrs or attrs['target_databases'] is None:
+            attrs['target_databases'] = group.groupdatabase_set.all()
+
+        return super().validate(attrs)
 
 class GroupExtractionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -114,15 +135,6 @@ class GroupExtractionSerializer(serializers.ModelSerializer):
         fields = ( "id", "extraction", "group" ) 
 
 class GroupDatabaseSynchronizationSerializer(serializers.ModelSerializer):
-    class GroupDatabaseSerializer(serializers.ModelSerializer):
-        database_name = serializers.CharField( source="database.name" )
-        database_host = serializers.CharField( source="database.host" )
-        database_port = serializers.CharField( source="database.port" )
-
-        class Meta:
-            model = models.GroupDatabase
-            fields = ("database_id", "database_name", "database_host", "database_port")
-
     group_database = GroupDatabaseSerializer()
 
     class Meta:
