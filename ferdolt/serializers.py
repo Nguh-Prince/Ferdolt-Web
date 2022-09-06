@@ -219,7 +219,7 @@ class TableInsertSerializer(serializers.Serializer):
     atomic = serializers.BooleanField(required=False) # set to True if all the records have to be added or none of them are
 
     def validate_database(self, value):
-        query = models.Database.objects.filter(name=value)
+        query = models.Database.objects.filter(name__iexact=value)
 
         if not query.exists():
             raise serializers.ValidationError( _("No database exists with name %(name)s " % { 'name': value }) )
@@ -248,7 +248,7 @@ class TableInsertSerializer(serializers.Serializer):
             table_columns = set([ f['name'] for f in table_column_set.values("name") ])
             table_primary_key_columns =  [ f['name'] for f in table_column_set.filter(columnconstraint__is_primary_key=True).values("name") ]
             not_null_columns = set( [ f.name.lower() for f in table_column_set.filter(is_nullable=False) ] )
-
+            
             for i in range( len( attrs['data'] ) ):
                 if not isinstance( attrs['data'][i], dict ):
                     validation_errors.append(
@@ -288,7 +288,7 @@ class TableInsertSerializer(serializers.Serializer):
         return super().validate(attrs)
 
 class TableUpdateSerializer(TableInsertSerializer):
-    reference_columns = serializers.ListField(allow_empty=True, child=serializers.CharField()) 
+    # reference_columns = serializers.ListField(allow_empty=True, child=serializers.CharField()) 
     # these are the columns to use for the WHERE clause in the update, if empty the primary key columns will be used instead
     def validate(self, attrs):
         database = attrs.get("database")
@@ -310,16 +310,25 @@ class TableUpdateSerializer(TableInsertSerializer):
                     % { 'index': i+1, 'type': type( attrs['data'][i] ) }) )
                     )
             
-                columns_in_common = table_columns & attrs['data'][i].keys()
+                columns_in_common = table_columns & attrs['data'][i]['current'].keys()
+                
                 attrs['columns_in_common'] = columns_in_common
+
+                update_columns_in_common = table_columns & attrs['data'][i]['update'].keys()
+                attrs['update_columns_in_common'] = update_columns_in_common
 
                 # at least one key in the dictionary must correspond to a column in the target table
                 if not columns_in_common:
                     validation_errors.append(
-                        serializers.ValidationError( _("At least one of the keys in the dictionary must be in %(set)s set" 
-                        % { 'set': str(columns_in_common) }) )
+                        serializers.ValidationError( _("At least one of the keys in the current dictionary must be in the %(set)s set" 
+                        % { 'set': str(table_columns) }) )
                     )
-            
+                
+                if not update_columns_in_common:
+                    validation_errors.append(
+                        serializers.ValidationError( _("At least one of the keys in the update dictionary must be in the %(set)s set" % { 'set': str(table_columns) } ) )
+                    )
+
             if validation_errors:
                 raise serializers.ValidationError(validation_errors)
 
@@ -330,7 +339,7 @@ class TableUpdateSerializer(TableInsertSerializer):
             raise serializers.ValidationError( _("The %(table_name)s table does not exist in the %(schema_name)s schema of the %(database_name)s database" 
             % { 'schema_name': attrs['schema'], 'database_name': database.name, 'table_name': attrs['table'] } ) )
 
-        return super().validate(attrs)
+        return attrs
 
 class TableDeleteSerializer(serializers.Serializer):
     database = serializers.CharField(max_length=150)

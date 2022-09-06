@@ -196,15 +196,12 @@
                     </thead>
 
                     <tbody>
-                        <tr>
-                            <td></td>
-                        </tr>
                     </tbody>
                 </table>
             </div>
 
             <div class="modal-footer">
-                <button class="btn btn-outline-primary" onclick="submitNewRows()">{% trans "Submit" %}</button>
+                <button class="btn btn-outline-primary" onclick="submitRowUpdates()">{% trans "Submit" %}</button>
             </div>
         </div>
     </div>
@@ -264,7 +261,6 @@
                     }
                 }
             })
-
         }
     })
 
@@ -401,7 +397,7 @@
             console.log(record)
 
             let rowId = generateRandomId()
-            let row = createElement('tr', [], { id: rowId })
+            let row = createElement('tr', [], { id: rowId, "data-table-index": index })
 
             let deleteCell = createElement('td', [], {})
             $(row).append(deleteCell)
@@ -476,8 +472,8 @@
             let checkBoxCell = createElement('td', [], {})
             $(row).append(checkBoxCell)
 
-            let checkBox = createElement('input', ['form-check-input'],
-                { type: 'checkbox', id: 'select-row' })
+            let checkBox = createElement('input', ['form-check-input', 'select-row'],
+                { type: 'checkbox' })
 
             $(checkBox).change(function () {
                 let object = {};
@@ -696,6 +692,78 @@
             }
         })
         console.log(rows)
+    }
+
+    function submitRowUpdates() {
+        console.log("Calling submitRowUpdates...")
+        rows = [];
+
+        $("#update-records-modal tbody tr").each( (i, row) => {
+            console.log('The row is: ')
+            console.log(row)
+            let index = $(row).attr( 'data-table-index' )
+            
+            console.log(`The row's index is: ${index}`)
+
+            if (index) {
+                let currentRecord = SELECTED_RECORDS[index];
+                console.log("currentRecord");
+                console.log(currentRecord);
+
+                let updateObject = {};
+                let currentRecordKeys = Object.keys(currentRecord);
+
+                console.log("Current record's keys")
+                console.log(currentRecordKeys)
+
+                $(row).find('input').each( ( j, input ) => {
+                    let inputName = $(input).attr('name').toLowerCase();
+                    let inputValue = $(input).val();
+
+                    if ( getTableColumnNames().includes(inputName) && 
+                        currentRecordKeys.includes(inputName) && 
+                        currentRecordK[inputName] != inputValue
+                    ) {
+                        updateObject[inputName] = inputValue
+                    }
+                } )
+
+                console.log("updateObject")
+                console.log(updateObject);
+
+                if (updateObject && currentRecord) {
+                    rows.push({
+                        current:currentRecord,
+                        update: updateObject
+                    })
+                }
+            }
+        } )
+
+        if (rows) {
+            $.ajax({
+                type: "PUT",
+                url: `http://${location.host}${API_URL}/ferdolt/tables/update_data/`,
+                data: JSON.stringify({
+                    database: DATABASE_NAME, 
+                    schema: SCHEMA_NAME,
+                    table: TABLE_NAME,
+                    data: rows
+                }),
+                contentType: "application/json",
+                success: function (data) {
+                    displayMessage( "The records have been successfull updated", ["alert", "alert-success", "alert-dismissible"] )
+                    SELECTED_RECORDS = [];
+                    numberOfSelectedRows = 0;
+                    getRecords();
+                },
+                error: function (data) {
+                    displayMessage("Error updating the records")
+                }
+            })
+        } else {
+            displayMessage("There are no updates to be made. Update a row and click the button again")
+        }
     }
 </script>
 {% endif %}

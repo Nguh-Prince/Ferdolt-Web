@@ -1,15 +1,13 @@
 import re
-from tempfile import TemporaryFile
-from unittest import result
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from core.exceptions import InvalidDatabaseConnectionParameters
-from frontend import views
 from rest_framework import serializers as drf_serializers
 
 import logging
+import psycopg
 import pyodbc
 
 from django.db.models import Q
@@ -17,7 +15,7 @@ from django.utils.translation import gettext as _
 from django.utils import timezone
 
 from common.viewsets import MultipleSerializerViewSet
-from core.functions import get_database_connection, get_database_details
+from core.functions import get_database_connection, get_database_details, get_dbms_booleans
 
 from . import serializers
 from . import  permissions
@@ -75,8 +73,8 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     
     serializer_classes = {
         'insert_data': serializers.TableInsertSerializer,
-        'update': serializers.TableUpdateSerializer,
-        'delete': serializers.TableDeleteSerializer
+        'update_data': serializers.TableUpdateSerializer,
+        'delete_data': serializers.TableDeleteSerializer
     }
 
     def get_queryset(self):
@@ -174,9 +172,8 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         serializer.is_valid(raise_exception=True)
         
         database = serializer.validated_data.pop('database')
-        table = serializer.validated_data.pop('table')
+        table: models.Table = serializer.validated_data.pop('table')
         atomic = serializer.validated_data.pop('atomic')
-        reference_columns = serializer.validated_data.pop('reference_columns')
 
         connection = get_database_connection(database)
 
@@ -187,36 +184,53 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
         table_column_set = table.column_set.values("name")
         table_primary_key_set = table.column_set.filter( columnconstraint__is_primary_key=True ).values("name")
+        
+        dbms_booleans = get_dbms_booleans(database)
 
         error_occured_flag = False
         records_updated = []
 
         for record in serializer.validated_data['data']:
-            reference_columns = [ column['name'] for column in table_primary_key_set ] if not reference_columns else reference_columns
-            columns_in_common = [ column['name'] for column in table_column_set if column['name'] in record.keys() and column['name'] not in reference_columns ]
-            
-            values_to_insert = tuple( record[f] for f in columns_in_common + reference_columns )
+            reference_columns = set([ column['name'] for column in table_column_set if column['name'] in record['current'].keys() ])
+            update_columns = [ column['name'] for column in table_column_set if column['name'] in record['update'].keys() ]
+
+            values_to_insert = tuple( [ record['update'][f] for f in update_columns ] + 
+                [ record['current'][f] for f in reference_columns ] 
+            )
 
             query = f"""
-            UPDATE {table.schema.name}.{table.name} SET { ', '.join( [ f"{column}=?" for column in columns_in_common ] ) } 
+            UPDATE {table.get_queryname()} SET { ', '.join( [ f"{column}=?" for column in update_columns ] ) } 
             WHERE { ', '.join( [ f"{column}=?" for column in reference_columns ] ) }
             """
+
             try:
+                if dbms_booleans["is_sqlserver_db"]:
+                    try:
+                        cursor.execute( f"SET IDENTITY_INSERT {table.get_queryname()} ON" )
+                    except pyodbc.ProgrammingError as e:
+                        logging.error( (f"Error setting identity insert on for {table.get_queryname()} table. Error: {str(e)}") )
+                        connection.rollback()
+                    
                 cursor.execute( query, values_to_insert )
-            except pyodbc.ProgrammingError as e:
-                connection.rollback()
-                logging.error( _("Error inserting %(values)s in %(table)s. Exception caught: %(message)s" % { 'values': str(values_to_insert), 
-                'table': f"{table.schema.database.name}.{table.schema.name}.{table.name}", 'message': str(e) } ) )
-                error_occured_flag = False
-                if atomic:
-                    logging.error( _("An error occured, the changes will not be committed. Error: %(error)s" % { 'error': str(e) }) )
-                    return Response( data = _("An error occured, the changes will not be committed"), status=status.HTTP_400_BAD_REQUEST )
 
-            records_updated.append(record)
+                if not atomic: 
+                    connection.commit()
 
-            if not atomic: 
-                connection.commit()
-        
+                if dbms_booleans["is_sqlserver_db"]:
+                    try:
+                        cursor.execute( f"SET IDENTITY_INSERT {table.get_queryname()} OFF" )
+                    except pyodbc.ProgrammingError as e:
+                        logging.error( (f"Error setting identity insert off for {table.get_queryname()} table. Error: {str(e)}") )
+                        connection.rollback()
+
+            except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
+                logging.error(f"Error execuing update query. Query: {query}")
+                return Response( data={'message': "Error updating records"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR )
+            except (pyodbc.Error, psycopg.Error) as e:
+                breakpoint()
+                logging.error(f"Error execuing update query. Query: {query}")
+                return Response( data={'message': "Error updating records"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR )
+
         if atomic and not error_occured_flag:
             connection.commit()
         elif atomic and error_occured_flag:
