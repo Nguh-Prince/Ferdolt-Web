@@ -247,7 +247,7 @@ class TableInsertSerializer(serializers.Serializer):
 
             table_columns = set([ f['name'] for f in table_column_set.values("name") ])
             table_primary_key_columns =  [ f['name'] for f in table_column_set.filter(columnconstraint__is_primary_key=True).values("name") ]
-            not_null_columns = set( [ f['name'] for f in table_column_set.filter(is_nullable=False) ] )
+            not_null_columns = set( [ f.name.lower() for f in table_column_set.filter(is_nullable=False) ] )
 
             for i in range( len( attrs['data'] ) ):
                 if not isinstance( attrs['data'][i], dict ):

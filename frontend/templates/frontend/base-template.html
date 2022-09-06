@@ -24,6 +24,12 @@
     <link href="{% static 'frontend/assets/css/app.min.css' %}" rel="stylesheet" type="text/css" />
     <script src="{% static 'frontend/assets/js/jquery.min.js' %}"></script>
 
+    <style>
+        .page-wrapper {
+            overflow-x: scroll;
+        }
+    </style>
+
     {% block extra_styles %}
     {% endblock %}
 </head>
@@ -49,8 +55,8 @@
                 <li class="menu-label mt-0">Main</li>
                 <li>
                     <a href="javascript: void(0);"> <i data-feather="home"
-                            class="align-self-center menu-icon"></i><span>{% trans "Dashboard" %}</span><span class="menu-arrow"><i
-                                class="mdi mdi-chevron-right"></i></span></a>
+                            class="align-self-center menu-icon"></i><span>{% trans "Dashboard" %}</span><span
+                            class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
                     <ul class="nav-second-level" aria-expanded="false">
                         <li class="nav-item"><a class="nav-link" href="{% url 'frontend:index' %}"><i
                                     class="ti-control-record"></i>{% trans "Analytics" %}</a></li>
@@ -59,11 +65,12 @@
 
                 <li>
                     <a href="javascript: void(0);"><i data-feather="grid"
-                            class="align-self-center menu-icon"></i><span>{% trans "Data" %}</span><span class="menu-arrow"><i
-                                class="mdi mdi-chevron-right"></i></span></a>
+                            class="align-self-center menu-icon"></i><span>{% trans "Data" %}</span><span
+                            class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
                     <ul class="nav-second-level" aria-expanded="false">
-                        <li class="nav-item"><a class="nav-link" href="{% url 'frontend:databases' %}"><i data-feather="database"
-                            class="align-self-center menu-icon"></i>{% trans "Databases" %}</a></li>
+                        <li class="nav-item"><a class="nav-link" href="{% url 'frontend:databases' %}"><i
+                                    data-feather="database" class="align-self-center menu-icon"></i>{% trans "Databases"
+                                %}</a></li>
 
                         <li class="nav-item"><a class="nav-link" href="{% url 'frontend:tables' %}"><i
                                     class="ti-control-record"></i>{% trans "Tables" %}</a></li>
@@ -72,31 +79,35 @@
                     </ul>
                 </li>
 
-                <li class="nav-item"><a class="nav-link" href="{% url 'frontend:servers' %}"><i data-feather="hard-drive"
-                    class="align-self-center menu-icon"></i>{% trans "Servers" %}</a></li>
-                
+                <li class="nav-item"><a class="nav-link" href="{% url 'frontend:servers' %}"><i
+                            data-feather="hard-drive" class="align-self-center menu-icon"></i>{% trans "Servers" %}</a>
+                </li>
+
                 <li>
-                   <a href="javascript: void(0)">
+                    <a href="javascript: void(0)">
                         <i data-feather="filter" class="align-self-center menu-icon"></i>
                         <span>Activities</span>
-                   </a> 
+                    </a>
 
-                   <ul class="nav-second-level" aria-expanded="false">
+                    <ul class="nav-second-level" aria-expanded="false">
                         <li class="nav-item">
                             <a href="{% url 'frontend:extractions' %}" class="nav-link">
-                                <i data-feather="upload-cloud" class="align-self-center menu-icon"></i> {% trans "Extractions" %}
+                                <i data-feather="upload-cloud" class="align-self-center menu-icon"></i> {% trans
+                                "Extractions" %}
                             </a>
                         </li>
 
                         <li class="nav-item">
                             <a href="{% url 'frontend:synchronizations' %}" class="nav-link">
-                                <i data-feather="download-cloud" class="align-self-center menu-icon"></i> {%  trans "Synchronizations" %}
+                                <i data-feather="download-cloud" class="align-self-center menu-icon"></i> {% trans
+                                "Synchronizations" %}
                             </a>
                         </li>
 
                         <li class="nav-item"><a class="nav-link" href="{% url 'frontend:file_manager' %}"><i
-                            class="align-self-center menu-icon" data-feather="file"></i>{% trans "File Manager" %}</a></li>
-                   </ul>
+                                    class="align-self-center menu-icon" data-feather="file"></i>{% trans "File Manager"
+                                %}</a></li>
+                    </ul>
                 </li>
 
                 <li>
@@ -289,8 +300,6 @@
                     </li>
                 </ul>
             </nav>
-
-            <div id="messages" style="z-index: 1100;" class="container"></div>
             <!-- end navbar-->
         </div>
         <!-- Top Bar End -->
@@ -301,6 +310,10 @@
 
     {% block modals %}
     {% endblock %}
+
+    <div id="messages" style="z-index: 1300; position: absolute; top: 0;" class="container py-3 px-3">
+        
+    </div>
 
 </body>
 

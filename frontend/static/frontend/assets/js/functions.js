@@ -50,7 +50,6 @@ function createElementsRecursively(object) {
     // an attributes object (which has the different attributes alongside their values e.g {'id': 'new-div'})
     // and an optional elements attribute, which is a list consisting of other objects which have the same structure as it does
     let element = createElementFromObject(object)
-    console.log("Creating element...")
     if (!object.elements) {
         return element
     } else {

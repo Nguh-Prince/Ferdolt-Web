@@ -70,6 +70,8 @@ class DatabaseSchema(models.Model):
         return super().save(*args, **kwargs)
 
 class Table(models.Model):
+    # validations
+    # on insert, non-nullable columns must be present
     schema = models.ForeignKey(DatabaseSchema, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
     level = models.IntegerField(default=0) # this level is the order in which items should be added to tables to avoid integrity errors 

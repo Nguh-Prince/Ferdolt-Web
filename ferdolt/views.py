@@ -1,3 +1,4 @@
+import re
 from tempfile import TemporaryFile
 from unittest import result
 from rest_framework import viewsets
@@ -69,7 +70,7 @@ class DatabaseSchemaViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return models.DatabaseSchema.objects.all()
 
-class TableViewSet(MultipleSerializerViewSet):
+class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     serializer_class = serializers.TableSerializer
     
     serializer_classes = {
@@ -88,8 +89,15 @@ class TableViewSet(MultipleSerializerViewSet):
         connection = get_database_connection(table.schema.database)
         cursor = connection.cursor()
 
+        table_primary_key_columns = [ f.name for f in table.column_set.filter( 
+                columnconstraint__is_primary_key=True
+            ) 
+        ]
+
         query = f"""
-        SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table.schema.name}.{table.name}
+        SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } 
+        FROM {table.schema.name}.{table.name} { ' ORDER BY ' if table_primary_key_columns else '' } 
+        { ', '.join( [ f for f in table_primary_key_columns ] ) }
         """
 
         results = cursor.execute(query)
@@ -100,6 +108,8 @@ class TableViewSet(MultipleSerializerViewSet):
         for row in results:
             row_dictionary = dict( zip( columns, row ) )
             records.append(row_dictionary)
+
+        connection.close()
 
         return Response(data=records)
 
@@ -238,11 +248,15 @@ class TableViewSet(MultipleSerializerViewSet):
 
         for record in serializer.validated_data['data']:
             columns_in_common = [ column['name'] for column in table_column_set if column['name'].lower() in record.keys() ]
-            values_to_insert = tuple( value for key in columns_in_common for value in record[key] )
+            # values_to_insert = tuple( value for key in columns_in_common for value in record[key] )
+            values_to_insert = tuple( record[key] for key in columns_in_common )
 
             query = f"""
-            DELETE FROM {table.schema.name}.{table.name} WHERE { " OR ".join( f"{key}=?" for key in columns_in_common for __ in record[key] ) }
+            DELETE FROM {table.schema.name}.{table.name} WHERE 
+            { " AND ".join( f"{key}=?" for key in columns_in_common ) }
             """
+
+            breakpoint()
 
             try:
                 cursor.execute(query, values_to_insert)

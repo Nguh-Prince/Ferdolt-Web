@@ -5,6 +5,12 @@
 <link rel="stylesheet" href="{% static 'frontend/assets/css/dataTables.bootstrap5.min.css' %}">
 <script src="{% static 'frontend/assets/js/jquery.dataTables.min.js' %}"></script>
 <script src="{% static 'frontend/assets/js/dataTables.bootstrap5.min.js' %}"></script>
+<style>
+    .edit-record,
+    .delete-record {
+        cursor: pointer;
+    }
+</style>
 {% endblock %}
 
 {% block breadcrumbs %}
@@ -13,7 +19,7 @@
     <a href="{% url 'frontend:tables' %}">{% trans "Tables" %}</a>
 </li>
 <li class="breadcrumb-item active" aria-current="page">
-    {{ table.schema.database.name }}.{{ table.schema.name }}.{{ table.name }} 
+    {{ table.schema.database.name }}.{{ table.schema.name }}.{{ table.name }}
 </li>
 {% else %}
 <li class="breadcrumb-item active">
@@ -60,12 +66,27 @@
         <div class="row">
             <div class="col-sm-12">
                 <div class="page-title-box">
-                    <div class="row justify-content-end">
-                        <div class="col-auto align-self-center">
-                            <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
-                                data-bs-target="#new-records-modal">
-                                <i class="fas fa-plus me-2"></i>{% trans "Add record(s)" %}
-                            </button>
+                    <div class="row">
+                        <div class="col-md-6 justify-content-end">
+                            <div class="col-auto align-self center d-none" id="action-buttons-container">
+                                <button class="btn btn-outline-danger btn-sm mx-2" id="delete-many">
+                                    <i data-feather="trash-2" style="width: 16; height: 16;"></i>
+                                </button>
+                                <button class="btn btn-outline-success btn-sm mx-2" id="edit-many"
+                                    data-bs-toggle="modal" data-bs-target="#update-records-modal">
+                                    <i data-feather="edit" style="width: 16; height: 16;"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="row col-md-6 justify-content-end">
+                            <div class="col-auto align-self-center">
+                                <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                                    data-bs-target="#new-records-modal">
+                                    <i data-feather="plus-square" style="width: 16; height: 16;"></i>{% trans "Add
+                                    record(s)" %}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -73,7 +94,13 @@
         </div>
         <table class="table table-striped" id="records">
             <thead>
-                <tr>
+                <tr id="row-1">
+                    <th>
+                        <input type="checkbox" class="form-check-input">
+                    </th>
+                    <th>
+
+                    </th>
                     {% for column in table.column_set.all %}
                     <th>
                         {{ column.name }}
@@ -114,13 +141,14 @@
                     <thead>
                         <tr>
                             {% for column in table.column_set.all %}
-                            <th>{{ column.name }}</th>
+                            <th>{{ column.name }} {% if not column.is_nullable %}*{% endif %}</th>
                             {% endfor %}
                         </tr>
                     </thead>
 
                     <tbody>
                         <tr>
+                            <td></td>
                             {% for column in table.column_set.all %}
                             <td>
                                 <input type="text" id="{{ column.name }}-input" name="{{ column.name }}"
@@ -147,28 +175,121 @@
         </div>
     </div>
 </div>
+
+<div class="modal" id="update-records-modal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "Update record(s)" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            {% for column in table.column_set.all %}
+                            <th>{{ column.name }} {% if not column.is_nullable %}*{% endif %}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-outline-primary" onclick="submitNewRows()">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'frontend/plugins/datatables/jquery.dataTables.min.js' %}"></script>
+<script src="{% static 'frontend/plugins/datatables/dataTables.bootstrap5.min.js' %}"></script>
 <script>
-    var TABLE_ID = {{ table.id }}
+    $("#tables").DataTable();
+</script>
+{% if table %}
+<script>
+    const TABLE_ID = {{ table.id }}
 
-    var DATABASE_NAME = "{{ table.schema.database.name }}"
-    var SCHEMA_NAME = "{{ table.schema.name }}"
-    var TABLE_NAME = "{{ table.name }}"
+    const DATABASE_NAME = "{{ table.schema.database.name }}"
+    const SCHEMA_NAME = "{{ table.schema.name }}"
+    const TABLE_NAME = "{{ table.name }}"
+
+    var numberOfSelectedRows = 0
+</script>
+
+<script>
+    const NON_NULLABLE_FIELDS = {};
+    var SELECTED_RECORDS = [];
+
+    $("#edit-many").click(() => {
+        displayRowsOnUpdateRecordsModalTable(SELECTED_RECORDS);
+    })
+
+    $("#delete-many").click(() => {
+        if (SELECTED_RECORDS) {
+            $.ajax({
+                type: "DELETE",
+                url: `http://${location.host}${API_URL}/ferdolt/tables/delete_data/`,
+                data: JSON.stringify({
+                    database: DATABASE_NAME,
+                    schema: SCHEMA_NAME,
+                    table: TABLE_NAME,
+                    data: SELECTED_RECORDS
+                }),
+                contentType: 'application/json',
+                success: function (data) {
+                    displayMessage("Record deleted successfully", ["alert", "alert-success", "alert-dismissible"])
+                    SELECTED_RECORDS = [];
+                    numberOfSelectedRows = 0;
+                    getRecords()
+                },
+                error: function (data) {
+                    if (data.status == 500) {
+                        displayMessage("A server error occured. Could not delete record")
+                    }
+                    else {
+                        console.log(data.responseJSON)
+                    }
+                }
+            })
+
+        }
+    })
+
+    const setNonNullableFields = async () => {
+        console.log("Calling async anonymous function to get the non nullable columns")
+        for (let column of state.table.columns) {
+            if (!column.is_nullable) {
+                NON_NULLABLE_FIELDS[`${column.id}`] = column
+            }
+        }
+    }
 
     $(document).ready(function () {
         // $('#tables').DataTable();
 
         $.ajax({
             type: "GET",
-            url: `http://${location.host}${API_URL}/ferdolt/tables/${TABLE_ID}`,
+            url: `http://${location.host}${API_URL}/ferdolt/tables/${TABLE_ID}/`,
             success: function (data) {
                 console.log("Gotten response from tables API")
                 state.table = data
+                setNonNullableFields();
                 init()
                 getRecords()
+                $("#records").DataTable();
             },
             error: function (data) {
 
@@ -184,31 +305,45 @@
             $("#records").find('thead')
         ]
 
-        let row = createElement('tr', [], {})
-
-        // $(row).append(createElementsRecursively({
-        //     tag: "th",
-        //     classes: [],
-        //     attributes: {},
-        //     elements: [
-        //         {
-        //             tag: "i",
-        //             classes: [],
-        //             attributes: { "data-feather": "trash" }
-        //         }
-        //     ]
-        // }))
-
-        feather.replace()
-
-        for (let column of state.table.columns) {
-            let header = createElement("th", [], {})
-            header.textContent = column.name
-
-            $(row).append(header)
-        }
-
         for (let selector of selectors) {
+            let row = createElement('tr', [], {})
+
+            if (selector.parent().attr('id') == 'records') {
+                $(row).append(createElementsRecursively({
+                    tag: "th",
+                    classes: [],
+                    attributes: {},
+                    elements: [
+                        {
+                            tag: "input",
+                            classes: ['form-check-input'],
+                            attributes: { type: 'checkbox', id: 'select-all-rows' }
+                        }
+                    ]
+                }))
+            }
+
+            $(row).append(createElementsRecursively({
+                tag: "th",
+                classes: [],
+                attributes: {}
+            }))
+
+            if (selector.parent().attr('id') == 'records') {
+                $(row).append(createElementsRecursively({
+                    tag: "td",
+                    classes: [],
+                    attributes: {}
+                }))
+            }
+
+            for (let column of state.table.columns) {
+                let header = createElement("th", [], {})
+                header.textContent = column.is_nullable ? column.name : `${column.name}*`
+
+                $(row).append(header)
+            }
+
             selector.html('')
             selector.append($(row).clone())
         }
@@ -220,7 +355,7 @@
 
     function addRowsToNewRecordsModalTable(numberOfRows) {
         for (let i = 0; i < numberOfRows; i++) {
-            let row = createElement('tr', [], {})
+            let row = createElement('tr', [], { id: generateRandomId() })
 
             row.appendChild(
                 createElementsRecursively({
@@ -230,8 +365,8 @@
                     elements: [
                         {
                             tag: "i",
-                            classes: ["fa", "fa-trash", "delete"],
-                            attributes: {  }
+                            classes: ['text-danger', 'delete-record'],
+                            attributes: { "data-feather": "trash", style: "height: 16; width: 16;" }
                         }
                     ]
                 })
@@ -246,7 +381,7 @@
                         {
                             tag: 'input',
                             classes: ['form-control'],
-                            attributes: { type: 'text', name: `${column.name}` }
+                            attributes: { type: 'text', name: `${column.name}`, "data-column-id": column.id }
                         }
                     ]
                 })
@@ -256,10 +391,59 @@
 
             $("#new-records-modal .modal-body tbody").append(row)
         }
+
+        feather.replace()
+    }
+
+    function displayRowsOnUpdateRecordsModalTable(rowsToDisplay) {
+        rowsToDisplay.map((record, index) => {
+            console.log(`Mapping the selected rows. Current row`)
+            console.log(record)
+
+            let rowId = generateRandomId()
+            let row = createElement('tr', [], { id: rowId })
+
+            let deleteCell = createElement('td', [], {})
+            $(row).append(deleteCell)
+
+            let deleteIcon = createElement('i', ['delete-record', 'text-danger'],
+                { style: "width: 16; height: 16", "data-feather": "trash" })
+            $(deleteCell).append(deleteIcon)
+
+            $(deleteCell).click(function () {
+                $(`#${rowId}`).remove()
+            })
+
+            for (let column of state.table.columns) {
+                let value = record[column.name];
+                console.log(`The value of the ${column} column is ${value}`)
+
+                let cell = createElementsRecursively({
+                    tag: 'td',
+                    classes: [],
+                    attributes: {},
+                    elements: [
+                        {
+                            tag: 'input',
+                            classes: ['form-control'],
+                            attributes: {
+                                type: 'text', name: `${column.name}`,
+                                "data-column-id": column.id, value: value ? value : ''
+                            }
+                        }
+                    ]
+                })
+
+                row.append(cell)
+            }
+
+            $("#update-records-modal .modal-body tbody").append(row);
+        })
+
+        feather.replace()
     }
 
     function getRecords() {
-        console.log("Calling getRecords()")
         $.ajax({
             type: "GET",
             url: `http://${location.host}${API_URL}/ferdolt/tables/${TABLE_ID}/records/`,
@@ -286,30 +470,181 @@
         console.log(state.tableRecords)
 
         for (let record of state.tableRecords) {
-            let row = createElement('tr', [], {})
-            console.log(record)
+            let rowId = generateRandomId()
+            let row = createElement('tr', [], { id: rowId })
 
-            // $(row).append(createElementsRecursively({
-            //     tag: "th",
-            //     classes: [],
-            //     attributes: {},
-            //     elements: [
-            //         {
-            //             tag: "i",
-            //             classes: [],
-            //             attributes: { "data-feather": "trash" }
-            //         }
-            //     ]
-            // }))
+            let checkBoxCell = createElement('td', [], {})
+            $(row).append(checkBoxCell)
+
+            let checkBox = createElement('input', ['form-check-input'],
+                { type: 'checkbox', id: 'select-row' })
+
+            $(checkBox).change(function () {
+                let object = {};
+
+                // get the row details to select
+                $(`#${rowId}`).find('.record-attribute').each((index, element) => {
+                    let columnName = $(element).attr('data-column-name')
+
+                    if (columnName) {
+                        object[columnName] = $(element).text()
+                    }
+                })
+                console.log("Input changed...")
+                console.log(object)
+                if (object) {
+                    if ($(this).prop('checked')) {
+                        console.log("Input was checked");
+                        // add this record to the selected records
+                        SELECTED_RECORDS.push(object)
+                        numberOfSelectedRows += 1;
+                    }
+
+                    else {
+                        console.log("Input was deselected");
+
+                        numberOfSelectedRows -= 1;
+                        let objectKeys = Object.keys(object);
+
+                        let temp = SELECTED_RECORDS;
+
+                        SELECTED_RECORDS.map((record, index) => {
+                            console.log("In map function")
+                            recordKeys = Object.keys(record)
+
+                            let recordsAreEqual = true;
+
+                            if (objectKeys.length !== recordKeys.length)
+                                recordsAreEqual = false
+
+                            for (let key of objectKeys) {
+                                if (object[key] !== record[key]) {
+                                    recordsAreEqual = false
+                                    break;
+                                }
+                            }
+
+                            if (recordsAreEqual) {
+                                if (index != 0 && index != temp.length - 1) {
+                                    temp = temp.slice(0, index) + temp.slice(index + 1, temp.length)
+                                } else if (index == 0) {
+                                    temp = temp.slice(1, temp.length)
+                                } else {
+                                    temp = temp.slice(0, index)
+                                }
+                            }
+                        })
+
+                        console.log("Out of map function")
+
+                        SELECTED_RECORDS = temp;
+                    }
+
+                    console.log("Done evaluating stuff")
+
+                    let actionButtonContainerSelector = "#action-buttons-container";
+
+                    if (numberOfSelectedRows <= 0) {
+                        console.log("Number of rows selected are: ")
+                        console.log(numberOfSelectedRows)
+
+                        $(actionButtonContainerSelector).addClass('d-none')
+                    } else if (numberOfSelectedRows < state.tableRecords.length) {
+                        console.log("Number of rows selected are: ")
+                        console.log(numberOfSelectedRows)
+
+                        $(actionButtonContainerSelector).removeClass('d-none')
+                        $("#delete-many").text(`Delete ${numberOfSelectedRows} rows`)
+                        document.getElementById
+
+                        $("#edit-many").text(`Update ${numberOfSelectedRows} rows`)
+                    } else {
+                        console.log("Number of rows selected are: ")
+                        console.log(numberOfSelectedRows)
+
+                        $(actionButtonContainerSelector).addClass('d-none')
+                        $("#delete-many").text(`Delete all`)
+
+                        $("#edit-many").text(`Update all`)
+                    }
+                }
+            })
+
+            $(checkBoxCell).append(checkBox)
+
+            let deleteCell = createElement('td', [], {})
+            $(row).append(deleteCell)
+
+            let deleteIcon = createElement('i', ["text-danger", 'remove-row', 'delete-record'],
+                { "data-feather": "trash", style: "height: 16; width: 16;" })
+            $(deleteCell).append(deleteIcon)
+
+            let editCell = createElement('td', [], {})
+            $(row).append(editCell)
+
+            let editIcon = createElement('i', ['edit-record', 'text-primary'], {
+                type: 'checkbox', "data-feather": "edit",
+                style: "width: 16; height: 16"
+            })
+            $(editCell).append(editIcon)
+
+            $(editCell).click(() => {
+
+            })
+
+            $(deleteCell).click(() => {
+                let object = {};
+
+                // get the row details to delete
+                $(`#${rowId}`).find('.record-attribute').each((index, element) => {
+                    console.log("Going through the motions")
+                    console.log(element)
+                    let columnName = $(element).attr('data-column-name')
+
+                    if (columnName) {
+                        object[columnName] = $(element).text()
+                    }
+                })
+
+                $.ajax({
+                    type: "DELETE",
+                    url: `http://${location.host}${API_URL}/ferdolt/tables/delete_data/`,
+                    data: JSON.stringify({
+                        database: DATABASE_NAME,
+                        schema: SCHEMA_NAME,
+                        table: TABLE_NAME,
+                        data: [
+                            object
+                        ]
+                    }),
+                    contentType: 'application/json',
+                    success: function (data) {
+                        displayMessage("Record deleted successfully", ["alert", "alert-success", "alert-dismissible"])
+                        getRecords()
+                    },
+                    error: function (data) {
+                        if (data.status == 500) {
+                            displayMessage("A server error occured. Could not delete record")
+                        }
+                        else {
+                            console.log(data.responseJSON)
+                        }
+                    }
+                })
+
+            })
 
             for (let column of state.table.columns) {
-                let cell = createElement('td', [], {})
+                let cell = createElement('td', ['record-attribute'], { "data-column-name": column.name })
                 cell.textContent = record[column.name]
                 row.appendChild(cell)
             }
 
             $("#records tbody").append(row)
         }
+        feather.replace()
+
+        $("#records").DataTable();
     }
 
     function getTableColumnNames() {
@@ -351,10 +686,10 @@
                 }
             ),
             contentType: "application/json",
-            success: function() {
+            success: function () {
                 displayMessage("Records have been added successfully", ["alert", "alert-success"])
             },
-            error: function(data) {
+            error: function (data) {
                 displayMessage("Error adding the records")
                 console.log(data.responseJSON)
                 console.log(rows)
@@ -363,4 +698,5 @@
         console.log(rows)
     }
 </script>
+{% endif %}
 {% endblock %}

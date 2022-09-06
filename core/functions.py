@@ -207,15 +207,18 @@ def get_table_foreign_key_references(table: ferdolt_models.Table):
                     name__iexact=record["column_name"] )
 
                     try:
-                        referencing_column = ferdolt_models.Column.objects.get( table=table, name__iexact=record["referencing_column"] ) 
+                        try:
+                            referencing_column = ferdolt_models.Column.objects.get( table=table, name__iexact=record["referencing_column"] ) 
+                            constraint = ferdolt_models.ColumnConstraint.objects.get_or_create( column=referencing_column, 
+                            is_foreign_key=True, defaults={'is_primary_key': False} )
 
-                        constraint = ferdolt_models.ColumnConstraint.objects.get_or_create( column=referencing_column, is_foreign_key=True, defaults={'is_primary_key': False} )
+                            constraint
+                            constraint[0].references = referenced_column
+                            constraint[0].save()
 
-                        constraint
-                        constraint[0].references = referenced_column
-                        constraint[0].save()
-
-                        logging.info(f"Successfully { 'created' if constraint[1] else 'modified' } the foreign key constraint")
+                            logging.info(f"Successfully { 'created' if constraint[1] else 'modified' } the foreign key constraint")
+                        except ferdolt_models.ColumnConstraint.MultipleObjectsReturned as e:
+                            logging.error(f"Multiple foreign key constraints on the {referencing_column.name.lower()} column")
 
                     except ferdolt_models.Column.DoesNotExist as e:
                         logging.error(f"Couldn't find the {record['column_name']} column in the {record['table_name']} table")
@@ -310,23 +313,33 @@ def get_database_details( database ):
 
                     for column in table_dictionary.keys():
                         column_dictionary = table_dictionary[column]
-
-                        column_record = ferdolt_models.Column.objects.get_or_create(table=table_record, name=column, data_type=column_dictionary['data_type'], datetime_precision=column_dictionary['datetime_precision'], character_maximum_length=column_dictionary['character_maximum_length'], numeric_precision=column_dictionary['numeric_precision'], is_nullable=column_dictionary['is_nullable'])[0]
-
-                        column_record.columnconstraint_set.all().delete()
-
-                        for constraint in column_dictionary['constraint_type']:
-                            primary_key_regex = re.compile("primary key", re.I)
-                            foreign_key_regex = re.compile("foreign key", re.I)
+                        try:
+                            column_record = ferdolt_models.Column.objects.get_or_create(table=table_record, name=column)[0]
                             
-                            if constraint:
-                                if primary_key_regex.search(constraint):
-                                    ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_primary_key=True)
-                                
-                                if foreign_key_regex.search(constraint):
-                                    ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_foreign_key=True)
+                            column_record.data_type = column_dictionary['data_type']
+                            column_record.datetime_precision = column_dictionary['datetime_precision']
+                            column_record.character_maximum_length = column_dictionary['character_maximum_length']
+                            column_record.numeric_precision = column_dictionary['numeric_precision']
+                            column_record.is_nullable = column_dictionary['is_nullable']
+                            column_record.save()
 
-                        get_table_foreign_key_references(table_record)
+                            column_record.columnconstraint_set.all().delete()
+
+                            for constraint in column_dictionary['constraint_type']:
+                                primary_key_regex = re.compile("primary key", re.I)
+                                foreign_key_regex = re.compile("foreign key", re.I)
+                                
+                                if constraint:
+                                    if primary_key_regex.search(constraint):
+                                        ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_primary_key=True)
+                                    
+                                    if foreign_key_regex.search(constraint):
+                                        ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_foreign_key=True)
+
+                            get_table_foreign_key_references(table_record)
+                        except ferdolt_models.Column.MultipleObjectsReturned as e:
+                            logging.error(f"Error when trying to get column {column} from table {table}. Error: {str(e)}")
+                            breakpoint()
 
 
     else:
