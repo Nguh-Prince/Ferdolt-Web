@@ -18,4 +18,5 @@ urlpatterns = [
     path("servers/<int:id>", views.servers, name='server-detail'),
     path("synchronizations/", views.synchronizations, name='synchronizations'),
     path("not_found/", views.not_found, name="not_found"),
+    path("pdf/", views.pdf, name='pdf'),
 ]

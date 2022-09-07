@@ -4,6 +4,7 @@ import sqlite3
 from django.utils.translation import gettext as _
 
 import pyodbc
+from core.functions import encrypt
 
 from ferdolt_web import settings
 from frontend.views import get_database_connection
@@ -52,6 +53,21 @@ class DatabaseSerializer(serializers.ModelSerializer):
     class Meta: 
         model = models.Database
         fields = ( "id", "name", "username", "password", 'host', 'port', 'schemas', 'version', 'instance_name' )
+
+    def validate_username(self, data):
+        data = encrypt(data)
+        return data
+
+    def validate_password(self, data):
+        data = encrypt(data)
+
+    def validate_host(self, data):
+        data = encrypt(data)
+        return data
+
+    def validate_port(self, data):
+        data = encrypt(data)
+        return data
 
     def create(self, validated_data) -> models.Database:
         version = validated_data.pop("dbms_version")
@@ -110,6 +126,11 @@ class DatabaseDetailSerializer(DatabaseSerializer):
             fields = ( "name", "tables" )
 
     schemas = DatabaseSchemas(source='databaseschema_set', many=True, read_only=True)
+    username = serializers.CharField(source='get_username')
+    password = serializers.CharField(source='get_password')
+    port = serializers.CharField(source='get_port')
+    host = serializers.CharField(source='get_host')
+    
     class Meta: 
         model = models.Database
         fields = ( "id", "name", "username", "password", 'host', 'port', 'schemas', 'version', 'instance_name' )

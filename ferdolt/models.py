@@ -5,6 +5,12 @@ from django.utils.translation import gettext as _
 import string
 import random
 
+from cryptography.fernet import Fernet
+
+from ferdolt_web.settings import FERNET_KEY
+
+f = Fernet(FERNET_KEY)
+
 class DatabaseManagementSystem(models.Model):
     name = models.CharField(max_length=50, unique=True, null=False)
 
@@ -33,7 +39,7 @@ class Database(models.Model):
     password = models.TextField()
     instance_name = models.CharField(max_length=100, null=True, blank=True)
     host = models.CharField(max_length=150, default="localhost")
-    port = models.IntegerField(default=1433)
+    port = models.CharField(default='1433', max_length=5)
     time_added = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -50,6 +56,22 @@ class Database(models.Model):
         self.name = self.name.lower()
         
         return super().save(*args, **kwargs)
+    
+    @property
+    def get_password(self):
+        return f.decrypt( self.password.encode('utf-8') ).decode('utf-8')
+
+    @property
+    def get_username(self):
+        return f.decrypt( self.username.encode('utf-8') ).decode('utf-8')
+
+    @property
+    def get_host(self):
+        return f.decrypt( self.host.encode('utf-8') ).decode('utf-8')
+    
+    @property
+    def get_port(self):
+        return f.decrypt( self.port.encode('utf-8') ).decode('utf-8')
 
 class DatabaseSchema(models.Model):
     database = models.ForeignKey(Database, on_delete=models.CASCADE)

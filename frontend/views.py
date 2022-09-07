@@ -1,12 +1,14 @@
 from datetime import timedelta
-import math
+import io
+import re
 
 from django.db.models import Count, Sum
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
 from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.utils.translation import gettext as _
-import re
+
+from reportlab.pdfgen import canvas
 
 from ferdolt import models as ferdolt_models
 from flux import models as flux_models
@@ -74,6 +76,18 @@ def index(request):
     }
 
     return render(request, "frontend/index.html", context=context)
+
+def pdf(request):
+    buffer = io.BytesIO()
+
+    p = canvas.Canvas(buffer)
+
+    p.drawString(100, 100, "Hello world.")
+
+    p.showPage()
+    p.save()
+
+    return FileResponse( buffer, as_attachment=True, filename='hello.pdf' )
 
 def databases(request, id: int=None):
     database = None

@@ -1,13 +1,16 @@
 import logging
 from multiprocessing.sharedctypes import Value
 
+from cryptography.fernet import Fernet
+
 from django.db.utils import IntegrityError
 
 import psycopg
 from core.exceptions import InvalidDatabaseConnectionParameters
 
-from ferdolt import models as ferdolt_models
 from flux import models as flux_models
+from ferdolt import models as ferdolt_models
+from ferdolt_web.settings import FERNET_KEY
 
 import re
 import pyodbc
@@ -18,6 +21,16 @@ import json
 
 sql_server_regex = re.compile("sql\s*server", re.I)
 postgresql_regex = re.compile("postgres", re.I)
+
+def encrypt(object, encoding='utf-8'):
+    f = Fernet(FERNET_KEY)
+
+    string = str(object)
+    string = string.encode(encoding)
+
+    token = f.encrypt(string)
+
+    return ( token, token.decode(encoding) )
 
 def custom_converter(object):
     if isinstance(object, dt.datetime):

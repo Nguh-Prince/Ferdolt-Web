@@ -85,29 +85,34 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         table: models.Table = self.get_object()
 
         connection = get_database_connection(table.schema.database)
-        cursor = connection.cursor()
 
-        table_primary_key_columns = [ f.name for f in table.column_set.filter( 
-                columnconstraint__is_primary_key=True
-            ) 
-        ]
+        if connection:
+            cursor = connection.cursor()
 
-        query = f"""
-        SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } 
-        FROM {table.schema.name}.{table.name} { ' ORDER BY ' if table_primary_key_columns else '' } 
-        { ', '.join( [ f for f in table_primary_key_columns ] ) }
-        """
+            table_primary_key_columns = [ f.name for f in table.column_set.filter( 
+                    columnconstraint__is_primary_key=True
+                ) 
+            ]
 
-        results = cursor.execute(query)
-        columns = [ column[0] for column in cursor.description ]
+            query = f"""
+            SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } 
+            FROM {table.schema.name}.{table.name} { ' ORDER BY ' if table_primary_key_columns else '' } 
+            { ', '.join( [ f for f in table_primary_key_columns ] ) }
+            """
 
-        records = []
+            results = cursor.execute(query)
+            columns = [ column[0] for column in cursor.description ]
 
-        for row in results:
-            row_dictionary = dict( zip( columns, row ) )
-            records.append(row_dictionary)
+            records = []
 
-        connection.close()
+            for row in results:
+                row_dictionary = dict( zip( columns, row ) )
+                records.append(row_dictionary)
+
+            connection.close()
+        else:
+            return Response( data={'message': "Error connecting to the database. Please check your credentials and ensure your database is running"}, 
+            status=status.HTTP_400_BAD_REQUEST )
 
         return Response(data=records)
 
