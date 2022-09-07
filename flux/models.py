@@ -47,6 +47,7 @@ class Synchronization(models.Model):
 class SynchronizationDatabase(models.Model):
     synchronization = models.ForeignKey(Synchronization, on_delete=models.CASCADE)
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE)
+    is_synchronized = models.BooleanField( default=False )
 
 class Message(models.Model):
     time_sent = models.DateTimeField(auto_now_add=True)

@@ -101,8 +101,12 @@
 {% block extra_js %}
 <script src="{% static 'frontend/assets/js/moment.js' %}"></script>
 <script src="{% static 'frontend/plugins/daterangepicker/daterangepicker.js' %}"></script>
+<script src="{% static 'frontend/plugins/datatables/jquery.dataTables.min.js' %}"></script>
+<script src="{% static 'frontend/plugins/datatables/dataTables.bootstrap5.min.js' %}"></script>
 
 <script>
+    $("#extractions table").DataTable();
+
     $(function () {
         $("label[for='new-extraction-start-time'], #new-extraction-start-time-display").daterangepicker({
             singleDatePicker: true,

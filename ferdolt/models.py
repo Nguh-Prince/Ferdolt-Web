@@ -33,7 +33,8 @@ class Database(models.Model):
     password = models.TextField()
     instance_name = models.CharField(max_length=100, null=True, blank=True)
     host = models.CharField(max_length=150, default="localhost")
-    port = models.IntegerField(default=1433);
+    port = models.IntegerField(default=1433)
+    time_added = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = [

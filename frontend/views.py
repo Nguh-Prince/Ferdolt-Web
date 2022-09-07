@@ -1,14 +1,15 @@
-from this import d
+from datetime import timedelta
+import math
+
+from django.db.models import Count, Sum
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
+from django.utils import timezone
 from django.utils.translation import gettext as _
-import pyodbc
 import re
 
 from ferdolt import models as ferdolt_models
 from flux import models as flux_models
-
-import psycopg
 
 from core.functions import get_column_datatype, get_database_connection, sql_server_regex, postgresql_regex
 
@@ -17,7 +18,62 @@ from core.functions import get_column_datatype, get_database_connection, sql_ser
 ################################################################################################
 
 def index(request):
-    return render(request, "frontend/base-template.html")
+    now = timezone.now()
+    # adding this delta to the current time will give us midnight of today
+    delta = timedelta(hours=now.hour, minutes=now.minute, seconds=now.second)
+
+    databases = (
+        ferdolt_models.Database.objects.all()
+        .order_by('-time_added').annotate(Count('id'))
+    )
+    database_count = databases.count()
+    
+    today_databases = databases.filter( time_added__gte=now-delta )
+    today_database_count = today_databases.count()
+
+    extractions = flux_models.Extraction.objects.all()
+    extraction_count = extractions.count()
+    data_extracted = flux_models.File.objects.filter( 
+        id__in=extractions.values("file__id")
+    ).values("size").aggregate(data_extracted=Sum('size'))
+    
+    size = data_extracted['data_extracted']
+    unit = None
+
+    if size >= 1024 ** 3:
+        data_extracted['data_extracted'] = round(size / 1024**3, 2)
+        unit = 'Gb'
+    elif size >= 1024 ** 2:
+        data_extracted['data_extracted'] = round(size / 1024**2, 2)
+        unit = 'Mb'
+    elif size >= 1024:
+        data_extracted['data_extracted'] = round(size / 1024, 2)
+        unit = 'Kb'
+    else:
+        unit = 'bytes'
+
+    today_extractions = extractions.filter( time_made__gte=now-delta )
+
+    synchronizations = flux_models.Synchronization.objects.all()
+    synchronization_count = synchronizations.count()
+
+    today_synchronizations = synchronizations.filter( time_received__gte=now-delta )
+
+    context={
+        'databases': databases[:5],
+        'database_count': database_count,
+        'today_database_count': today_database_count,
+        'extraction_count': extraction_count,
+        'today_extraction_count': today_extractions.count(),
+        'synchronization_count': synchronization_count,
+        'today_synchronization_count':today_synchronizations.count(),
+        'data_extracted': {
+            'size': data_extracted['data_extracted'],
+            'unit': unit
+        }
+    }
+
+    return render(request, "frontend/index.html", context=context)
 
 def databases(request, id: int=None):
     database = None
