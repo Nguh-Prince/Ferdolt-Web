@@ -126,7 +126,7 @@
                                     <p class="text-dark mb-0 fw-semibold">Data Extracted</p>
                                     <h3 class="m-0">{{ data_extracted.size }} {{ data_extracted.unit }}</h3>
                                     <p class="mb-0 text-truncate text-muted"><span class="text-danger"><i
-                                                class="mdi mdi-trending-down"></i>0 kb</span> Extracted Today</p>
+                                                class="mdi mdi-trending-down"></i>{{ data_extracted_today.size }} {{ data_extracted_today.unit }}</span> Extracted Today</p>
                                 </div>
                                 <div class="col-auto align-self-center">
                                     <div class="report-main-icon bg-light-alt">
@@ -217,42 +217,6 @@
         <!--end col-->
     </div>
 </div>
-
-<ul class="cd-accordion margin-top-lg margin-bottom-lg">
-    <li class="cd-accordion__item cd-accordion__item--has-children">
-        <input class="cd-accordion__input" type="checkbox" name="group-1" id="group-1">
-        <label class="cd-accordion__label cd-accordion__label--icon-folder" for="group-1"><span>Group 1</span></label>
-
-        <ul class="cd-accordion__sub cd-accordion__sub--l1">
-            <li class="cd-accordion__item cd-accordion__item--has-children">
-                <input class="cd-accordion__input" type="checkbox" name="sub-group-1" id="sub-group-1">
-                <label class="cd-accordion__label cd-accordion__label--icon-folder" for="sub-group-1"><span>Sub Group
-                        1</span></label>
-
-                <ul class="cd-accordion__sub cd-accordion__sub--l2">
-                    <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
-                            href="#0"><span>Image</span></a></li>
-                    <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
-                            href="#0"><span>Image</span></a></li>
-                    <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
-                            href="#0"><span>Image</span></a></li>
-                </ul>
-            </li>
-
-            <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
-                    href="#0"><span>Image</span></a></li>
-            <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
-                    href="#0"><span>Image</span></a></li>
-        </ul>
-    </li>
-
-    <li class="cd-accordion__item cd-accordion__item--has-children">
-        <a class="cd-accordion__label cd-accordion__label--icon-img" href="#0"><span>Image</span></a>
-    </li>
-    <li class="cd-accordion__item cd-accordion__item--has-children">
-        <a class="cd-accordion__label cd-accordion__label--icon-img" href="#0"><span>Image</span></a>
-    </li>
-</ul> <!-- cd-accordion -->
 {% endblock %}
 
 {% block extra_js %}

@@ -56,15 +56,18 @@ def index(request):
     today_database_count = today_databases.count()
 
     extractions = flux_models.Extraction.objects.all()
-    extraction_count = extractions.count()
-    data_extracted = flux_models.File.objects.filter( 
+    extraction_files = flux_models.File.objects.filter( 
         id__in=extractions.values("file__id")
-    ).values("size").aggregate(data_extracted=Sum('size'))
-    
-    size = data_extracted['data_extracted']
-    unit = None
+    )
+
+    extraction_count = extractions.count()
+    data_extracted = extraction_files.values("size").aggregate(data_extracted=Coalesce(Sum('size'), 0.0))
 
     today_extractions = extractions.filter( time_made__gte=now-delta )
+    data_extracted_today = (extraction_files.filter(id__in=today_extractions.values("file__id"))
+        .values("size")
+        .aggregate(data_extracted=Coalesce(Sum('size'), 0.0))
+    )
 
     synchronizations = flux_models.Synchronization.objects.all()
     synchronization_count = synchronizations.count()
@@ -72,7 +75,7 @@ def index(request):
     today_synchronizations = synchronizations.filter( time_received__gte=now-delta )
 
     database_names = [ f.name for f in databases ]
-    max_total_extraction_size = (extractions.values("extractiondatabase__database__id")
+    max_total_extraction_size = (extractions.values("extractionsourcedatabase__database__id")
         .annotate(size=Sum("file__size")).aggregate(Max("size"))
     )['size__max']
 
@@ -88,13 +91,16 @@ def index(request):
     data['unit'] = unit_size[1]
 
     for database in databases:
-        total_extraction_size = database.extractiondatabase_set.aggregate( data_extracted=Coalesce( Sum( "extraction__file__size" ), 0.0 ) )
+        total_extraction_size = database.extractionsourcedatabase_set.aggregate( data_extracted=Coalesce( Sum( "extraction__file__size" ), 0.0 ) )
 
-        data['number_of_extractions'].append( database.extractiondatabase_set.count() )
+        data['number_of_extractions'].append( database.extractionsourcedatabase_set.count() )
         data['number_of_synchronizations'].append( database.synchronizationdatabase_set.count() )
         data['data_extracted'].append( round(total_extraction_size['data_extracted'] / unit_size[2], 2) )
 
     unit_and_size = get_file_size_and_unit( data_extracted['data_extracted'])
+    data_extracted_today_unit_and_size = get_file_size_and_unit( 
+        data_extracted_today['data_extracted'] 
+    )
 
     context={
         'databases': databases[:5],
@@ -107,6 +113,10 @@ def index(request):
         'data_extracted': {
             'size': unit_and_size[0],
             'unit': unit_and_size[1]
+        },
+        'data_extracted_today': {
+            'size': data_extracted_today_unit_and_size[0],
+            'unit': data_extracted_today_unit_and_size[1]
         },
         'chartInfo': json.dumps(data)
     }
@@ -127,7 +137,8 @@ def pdf(request):
 
 def databases(request, id: int=None):
     database = None
-    
+    databases = ferdolt_models.Database.objects.all()
+
     if id:
         query = ferdolt_models.Database.objects.filter(id=id)
         if not query.exists():
@@ -135,107 +146,10 @@ def databases(request, id: int=None):
         else:
             # try to connect to the database
             database: ferdolt_models.Database = query.first()
+            databases = databases.filter( dbms_version=database.dbms_version )
 
-            is_postgres_db, is_sqlserver_db, is_mysql_db = False, False, False
-
-            # if no schemas have been added to the database's record, add the tables and schema for that record
-            if database.databaseschema_set.count() < 1:
-                connection = get_database_connection(database)
-
-                if connection:
-                    cursor = connection.cursor()
-                    
-                    dbms_name = database.dbms_version.dbms.name
-
-                    if sql_server_regex.search(dbms_name):
-                        query = """
-                            SELECT T.TABLE_NAME, T.TABLE_SCHEMA, C.COLUMN_NAME, C.DATA_TYPE, 
-                            C.CHARACTER_MAXIMUM_LENGTH, C.DATETIME_PRECISION, C.NUMERIC_PRECISION, C.IS_NULLABLE, TC.CONSTRAINT_TYPE 
-                            FROM INFORMATION_SCHEMA.TABLES T LEFT JOIN 
-                            INFORMATION_SCHEMA.COLUMNS C ON C.TABLE_NAME = T.TABLE_NAME AND T.TABLE_SCHEMA = C.TABLE_SCHEMA 
-                            LEFT JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE CU ON 
-                            CU.COLUMN_NAME = C.COLUMN_NAME AND CU.TABLE_NAME = C.TABLE_NAME AND CU.TABLE_SCHEMA = C.TABLE_SCHEMA LEFT JOIN 
-                            INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC ON TC.CONSTRAINT_NAME = CU.CONSTRAINT_NAME 
-                            WHERE T.TABLE_TYPE = 'BASE TABLE' ORDER BY T.TABLE_SCHEMA, T.TABLE_NAME
-                        """
-                        is_sqlserver_db = True
-                    
-                    if postgresql_regex.search(dbms_name):
-                        query = """
-                            SELECT T.TABLE_NAME, T.TABLE_SCHEMA, C.COLUMN_NAME, C.DATA_TYPE, 
-                            C.CHARACTER_MAXIMUM_LENGTH, C.DATETIME_PRECISION, C.NUMERIC_PRECISION, C.IS_NULLABLE, TC.CONSTRAINT_TYPE 
-                            FROM INFORMATION_SCHEMA.TABLES T LEFT JOIN 
-                            INFORMATION_SCHEMA.COLUMNS C ON C.TABLE_NAME = T.TABLE_NAME AND T.TABLE_SCHEMA = C.TABLE_SCHEMA 
-                            LEFT JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE CU ON 
-                            CU.COLUMN_NAME = C.COLUMN_NAME AND CU.TABLE_NAME = C.TABLE_NAME AND CU.TABLE_SCHEMA = C.TABLE_SCHEMA LEFT JOIN 
-                            INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC ON TC.CONSTRAINT_NAME = CU.CONSTRAINT_NAME 
-                            WHERE T.TABLE_TYPE = 'BASE TABLE' AND NOT T.TABLE_SCHEMA = 'pg_catalog' AND NOT T.TABLE_SCHEMA = 'information_schema' 
-                            ORDER BY T.TABLE_SCHEMA, T.TABLE_NAME
-                        """
-                        is_postgres_db = True
-
-                    if query:
-                        results = cursor.execute(query)
-                        columns = [ column[0].lower() for column in cursor.description ]
-
-                        dictionary = {}
-
-                        # get the database structure and store in a dictionary
-                        # I did this so that we don't have to continuously query the database for the tables and schemas
-                        for row in results:
-                            row_dictionary = dict( zip(columns, row) )      
-                            schema_dictionary = dictionary.setdefault(
-                            row_dictionary['table_schema'], {})
-                            table_dictionary = schema_dictionary.setdefault(
-                            row_dictionary['table_name'], {})
-
-                            column_dictionary = table_dictionary.setdefault(
-                            row_dictionary['column_name'], {})
-
-                            if not column_dictionary:
-                                column_dictionary = {
-                                    'data_type': get_column_datatype(is_postgres=is_postgres_db, is_sqlserver=is_sqlserver_db, 
-                                        is_mysql=is_mysql_db, data_type_string=row_dictionary['data_type']),
-                                    'character_maximum_length': row_dictionary['character_maximum_length'],
-                                    'datetime_precision': row_dictionary['datetime_precision'],
-                                    'numeric_precision': row_dictionary['numeric_precision'],
-                                    'constraint_type': set([row_dictionary['constraint_type']]),
-                                    'is_nullable': row_dictionary['is_nullable'].lower() == 'yes'
-                                }
-                            else:
-                                column_dictionary['constraint_type'].add( row_dictionary['constraint_type'] )
-
-                            table_dictionary[row_dictionary['column_name']] = column_dictionary
-
-                        for schema in dictionary.keys():
-                            schema_record = ferdolt_models.DatabaseSchema.objects.get_or_create(name=schema.lower(), database=database)[0]
-                            schema_dictionary = dictionary[schema]
-
-                            for table in schema_dictionary.keys():
-                                table_record = ferdolt_models.Table.objects.get_or_create(schema=schema_record, name=table.lower())[0]
-                                table_dictionary = schema_dictionary[table]
-
-                                for column in table_dictionary.keys():
-                                    column_dictionary = table_dictionary[column]
-
-                                    column_record = ferdolt_models.Column.objects.get_or_create(table=table_record, name=column, data_type=column_dictionary['data_type'], datetime_precision=column_dictionary['datetime_precision'], character_maximum_length=column_dictionary['character_maximum_length'], numeric_precision=column_dictionary['numeric_precision'], is_nullable=column_dictionary['is_nullable'])[0]
-
-                                    column_record.columnconstraint_set.all().delete()
-
-                                    for constraint in column_dictionary['constraint_type']:
-                                        primary_key_regex = re.compile("primary key", re.I)
-                                        foreign_key_regex = re.compile("foreign key", re.I)
-                                        
-                                        if constraint:
-                                            if primary_key_regex.search(constraint):
-                                                ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_primary_key=True)
-                                            
-                                            if foreign_key_regex.search(constraint):
-                                                ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_foreign_key=True)
-
-                else:
-                    return HttpResponse(f"Error connecting to {database.__str__()} database")
-    return render(request, "frontend/databases.html", context={'database': database})
+    return render(request, "frontend/databases.html", context={'database': database, 
+    'databases': databases})
 
 def not_found(request):
     return render(request, "frontend/auth-404.html")

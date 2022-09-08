@@ -37,6 +37,7 @@ class ExtractionTargetDatabase(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE)
     is_applied = models.BooleanField(default=False)
+    time_applied = models.DateTimeField(null=True)
 
 class ExtractionSourceDatabase(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)

@@ -76,9 +76,10 @@ class ExtractionSerializer(serializers.ModelSerializer):
                 validation_errors = []
 
                 schema = attrs['schema']
+                tables_key = 'extractionsourcetable_set'
 
-                if 'tables' in attrs and attrs['tables']:
-                    tables = attrs['tables']
+                if tables_key in attrs and attrs[tables_key]:
+                    tables = attrs[tables_key]
 
                     for table in tables:
                         table = table['table']
@@ -97,7 +98,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
                         ordered_dict['table'] = table
 
                         tables.append(table)
-                    attrs['tables'] = tables
+                    attrs[tables_key] = tables
 
                 return attrs
 
@@ -106,6 +107,10 @@ class ExtractionSerializer(serializers.ModelSerializer):
                 fields = ("id", "schema", "tables")
 
         schemas = ExtractionSourceDatabaseSchemaSerializer(many=True, required=False, source='extractionsourcedatabaseschema_set')
+
+        schemas_key = 'extractionsourcedatabaseschema_set'
+        schema_tables_key = 'extractionsourcetable_set'
+
         class Meta:
             model = models.ExtractionSourceDatabase
             fields = ( "id", "database", "schemas" )
@@ -114,9 +119,11 @@ class ExtractionSerializer(serializers.ModelSerializer):
             validation_errors = []
 
             database = attrs['database']
+            schemas_key = self.schemas_key
+            tables_key = self.schema_tables_key
 
-            if 'schemas' in attrs and attrs['schemas']:
-                schemas = attrs['schemas']
+            if schemas_key in attrs and attrs[schemas_key]:
+                schemas = attrs[schemas_key]
                 for schema in schemas:
                     if schema['schema'] not in database.databaseschema_set.all():
                         schema = schema['schema']
@@ -125,7 +132,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
                             % { 'id': schema.id, 'db_id': database.id }) )
                         )
                     else:
-                        if 'tables' not in schema:
+                        if tables_key not in schema:
                             tables = []
                             
                             for table in schema.table_set.all():
@@ -134,7 +141,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
                                 
                                 tables.append(ordered_dict)
                             
-                            schema['tables'] = tables
+                            schema[tables_key] = tables
 
             else:
                 # select all the schemas from the database
@@ -146,7 +153,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
                     schemas.append( ordered_dict )
                 
-                attrs['schemas'] = schemas
+                attrs[schemas_key] = schemas
 
             if validation_errors:
                 raise serializers.ValidationError(validation_errors)
@@ -154,7 +161,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
             return attrs
 
     databases = ExtractionSourceDatabaseSerializer(many=True, source='extractionsourcedatabase_set')
-    target_databases = serializers.ListField( child=serializers.IntegerField(), read_only=True ) # list of ids
+    target_databases = serializers.ListField( child=serializers.IntegerField(), write_only=True ) # list of ids
 
     use_pentaho = serializers.BooleanField(required=False, allow_null=True, write_only=True)
     file_name = serializers.CharField(source="file.file.name", read_only=True)
@@ -165,7 +172,6 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
     def validate_target_databases(self, items):
         validation_errors = []
-        
         if not items:
             raise serializers.ValidationError( _("The target_databases item must be a list with at least one item") )
 
@@ -179,6 +185,9 @@ class ExtractionSerializer(serializers.ModelSerializer):
                     % {'index': index+1, 'id': item}) )
                 )
         
+        if validation_errors:
+            raise serializers.ValidationError(validation_errors)
+
         return items
 
     class Meta:
@@ -206,7 +215,6 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
         if 'use_pentaho' not in validated_data or not validated_data['use_pentaho']:
             databases = validated_data.pop("extractionsourcedatabase_set")
-            breakpoint()
             start_time = None
             
             # set use_time to False if it is passed as False else True
@@ -234,7 +242,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
                         database_records.append(database)
                         
                         schemas = None
-                        schemas_key = 'schemas'
+                        schemas_key = 'extractionsourcedatabaseschema_set'
 
                         if schemas_key in database and database[schemas_key]:
                             schemas = database[schemas_key]
@@ -243,64 +251,73 @@ class ExtractionSerializer(serializers.ModelSerializer):
                             tables = None
                             _schema = schema['schema']
 
-                            schema_tables_key = 'tables'
+                            schema_tables_key = 'extractionsourcetable_set'
                             if schema_tables_key in schema and schema[schema_tables_key]:
                                 tables = schema[schema_tables_key]
 
-                            for _table in tables:
-                                table: ferdolt_models.Table = _table['table']
-                                
-                                table_query_name = table.get_queryname()
+                                for _table in tables:
+                                    table: ferdolt_models.Table = _table['table']
+                                    
+                                    table_query_name = table.get_queryname()
 
-                                schema_dictionary = database_dictionary.setdefault(_schema.name, {})
-                                table_results = schema_dictionary.setdefault( table.name, [] )
+                                    schema_dictionary = database_dictionary.setdefault(_schema.name, {})
+                                    table_results = schema_dictionary.setdefault( table.name, [] )
 
-                                time_field = table.column_set.filter( Q(name='last_updated') | Q(name="deletion_time") )
-        
-                                query = f"""
-                                SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table_query_name} 
-                                { f"WHERE { time_field.first().name } >= ?" if start_time and time_field.exists() and use_time else "" }
-                                """
+                                    time_field = table.column_set.filter( Q(name='last_updated') | Q(name="deletion_time") )
+            
+                                    query = f"""
+                                    SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table_query_name} 
+                                    { f"WHERE { time_field.first().name } >= ?" if start_time and time_field.exists() and use_time else "" }
+                                    """
 
-                                try:
-                                    rows = cursor.execute(query, start_time) if start_time and time_field.exists() and use_time else cursor.execute(query)
+                                    try:
+                                        rows = cursor.execute(query, start_time) if start_time and time_field.exists() and use_time else cursor.execute(query)
 
-                                    columns = [ column[0] for column in cursor.description ]
+                                        columns = [ column[0] for column in cursor.description ]
 
-                                    for row in rows:
-                                        row_dictionary = dict( zip( columns, row ) )
-                                        table_results.append(row_dictionary)
-                                except pyodbc.ProgrammingError as e:
-                                    logging.error(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
-                                    raise e
-                    
+                                        for row in rows:
+                                            row_dictionary = dict( zip( columns, row ) )
+                                            table_results.append(row_dictionary)
+                                    except pyodbc.ProgrammingError as e:
+                                        logging.error(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
+                                        raise e
+                        
                     else:
                         raise serializers.ValidationError( _("Invalid connection parameters") )
                 else:
                     raise serializers.ValidationError( _("No database exists with id %(id)s" % {'id': id}) )
 
-            filename = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}.json" )
+            if database_records:
+                filename = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}.json" )
 
-            with open( filename, "a+" ) as file:
-                json_string = json.dumps( results, default=custom_converter )
-                token = f.encrypt( bytes(json_string, 'utf-8') )
+                with open( filename, "a+" ) as file:
+                    json_string = json.dumps( results, default=custom_converter )
+                    token = f.encrypt( bytes(json_string, 'utf-8') )
 
-                file.write( token.decode('utf-8') )
-                file = models.File.objects.create( file=File( file, name=os.path.basename( filename ) ), size=os.path.getsize(filename), is_deleted=False )
+                    file.write( token.decode('utf-8') )
+                    
+                    with open( filename ) as __:
+                        file = models.File.objects.create( file=File( __, name=os.path.basename( filename ) ), size=os.path.getsize(filename), is_deleted=False )
 
-                extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
+                        extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
 
-                for database in database_records:
-                    # create extraction source databases, source schemas and source tables
-                    source_database = models.ExtractionSourceDatabase.objects.create( database=database['database'], extraction=extraction )
+                        # record source info (database, schema, table)
+                        for database in database_records:
+                            # create extraction source databases, source schemas and source tables
+                            source_database = models.ExtractionSourceDatabase.objects.create( database=database['database'], extraction=extraction )
 
-                    for schema in schemas:
-                        source_schema = models.ExtractionSourceDatabaseSchema.objects.create(extraction_database=source_database, schema=schema['schema'])
+                            for schema in database[self.ExtractionSourceDatabaseSerializer.schemas_key]:
+                                source_schema = models.ExtractionSourceDatabaseSchema.objects.create(extraction_database=source_database, schema=schema['schema'])
 
-                        for table in schema['tables']:
-                            models.ExtractionSourceTable.objects.create(extraction_database_schema=source_schema, table=table['table'])
-            
-            os.unlink( filename )
+                                for table in schema[self.ExtractionSourceDatabaseSerializer.schema_tables_key]:
+                                    models.ExtractionSourceTable.objects.create(extraction_database_schema=source_schema, table=table['table'])
+
+                        # record target databases
+                        if 'target_databases' in validated_data and validated_data['target_databases']:
+                            for database in validated_data['target_databases']:
+                                models.ExtractionTargetDatabase.objects.create(extraction=extraction, database=database, is_applied=False)
+
+                os.unlink( filename )
 
             return extraction
 

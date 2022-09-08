@@ -12,6 +12,10 @@
 
 {% endblock %}
 
+{% block extra_styles %}
+<link href="{% static 'frontend/plugins/daterangepicker/daterangepicker.css' %}" rel="stylesheet" type="text/css" />
+{% endblock %}
+
 {% block page_content %}
 <div class="container-fluid">
     {% if not database %}
@@ -37,13 +41,12 @@
     <div class="row">
         <div class="col-sm-12">
             <div class="page-title-box">
-                <div class="row">
-                    <div class="col-md-6 justify-content-start">
-                        <div class="col-auto align-self center d-none" id="action-buttons-container">
-                            <button class="btn btn-outline-orange btn-sm mx-2" id="delete-many">
-                                <i data-feather="upload" style="width: 16; height: 16;"></i> Extract
-                            </button>
-                        </div>
+                <div class="row justify-content-end">
+                    <div class="col-auto align-self-center d-none" id="action-buttons-container">
+                        <button class="btn btn-outline-orange btn-sm mx-2" id="delete-many"
+                            data-bs-target="#extract-from-database" data-bs-toggle="modal">
+                            <i data-feather="upload" style="width: 16; height: 16;"></i> Extract
+                        </button>
                     </div>
                 </div>
             </div>
@@ -55,12 +58,11 @@
         <li class="cd-accordion__item cd-accordion__item--has-children">
             <input type="checkbox" class="cd-accordion__input" name="{{ schema.name.lower }}-{{schema.id}}"
                 id="{{ schema.name.lower }}-{{schema.id}}" checked>
-            
+
             <label for="{{ schema.name.lower }}-{{schema.id}}"
                 class="cd-accordion__label cd-accordion__label--icon-folder">
-                <input type="checkbox" class="mx-2 select-all-tables" 
-                name="select-{{ schema.name.lower }}-{{schema.id}}" 
-                data-schema-id="{{ schema.id }}">
+                <input type="checkbox" class="mx-2 select-all-tables schema-select"
+                    name="select-{{ schema.name.lower }}-{{schema.id}}" data-schema-id="{{ schema.id }}">
                 <span>{{ schema.name }}</span></label>
 
             <ul class="cd-accordion__sub cd-accordion__sub-11">
@@ -70,9 +72,8 @@
                         id="{{ table.name.lower }}-{{table.id}}">
                     <label class="cd-accordion__label cd-accordion__label--icon-folder"
                         for="{{ table.name.lower }}-{{table.id}}">
-                        <input type="checkbox" class="mx-2 select-table" 
-                        data-schema-id="{{ schema.id }}" 
-                        name="select-{{ table.name.lower }}-{{table.id}}">
+                        <input type="checkbox" class="mx-2 select-table" data-table-id="{{ table.id }}"
+                            data-schema-id="{{ schema.id }}" name="select-{{ table.name.lower }}-{{table.id}}">
                         <span>{{ table.name }}</span></label>
 
                     <ul class="cd-accordion__sub cd-accordion__sub--l2">
@@ -172,12 +173,53 @@
         </div>
     </div>
 </div>
+
+{% if database %}
+<div class="modal" id="extract-from-database">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "Extract from " %} {{ database.name }}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="new-extraction-start-time" class="form-label"
+                        title="{% trans 'Get records from the database that have been created or modified since this time' %}">
+                        {% trans "Extraction start time" %}
+                    </label>
+                    <input type="text" id="new-extraction-start-time-display" class="form-control" readonly>
+                    <input type="datetime" id="new-extraction-start-time" class="d-none">
+                </div>
+                <div class="mb-3">
+                    <label for="target-databases" class="form-label">{% trans 'Target databases' %}</label>
+                    <select multiple id="target-databases" class="form-select">
+                        {% for database in databases %}
+                        <option value="{{ database.id }}">{{ database.name.lower }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="extractFromDatabase()">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
-<script>
-    var NUMBER_OF_SELECTED_TABLES = 0;
+<script src="{% static 'frontend/assets/js/moment.js' %}"></script>
+<script src="{% static 'frontend/plugins/daterangepicker/daterangepicker.js' %}"></script>
+<script src="{% static 'frontend/plugins/datatables/jquery.dataTables.min.js' %}"></script>
+<script src="{% static 'frontend/accordion/js/util.js' %}"></script>
+<script src="{% static 'frontend/accordion/js/main.js' %}"></script>
 
+{% if not database %}
+<script>
     $(document).ready(function () {
         console.log("Doc is ready...")
         // get the databases from the API
@@ -203,51 +245,6 @@
                 displayDatabases()
             }
         })
-    })
-
-    $(".select-all-tables").change(function () {
-        schemaId = $(this).attr('data-schema-id')
-        const schema = $(this);
-        const checked = $(this).is(':checked');
-
-        $(`.select-table[data-schema-id=${schemaId}]`).each(function () {
-            $(this).prop('checked', checked)
-
-            if (checked) {
-                NUMBER_OF_SELECTED_TABLES += 1;
-            } else {
-                NUMBER_OF_SELECTED_TABLES -= 1;
-            }
-        })
-
-        if (NUMBER_OF_SELECTED_TABLES > 0) {
-            $("#action-buttons-container").removeClass('d-none')
-        } else {
-            $("#action-buttons-container").addClass('d-none')
-        }
-    })
-
-    $('.select-table').change(function () {
-        let schemaId = $(this).attr("data-schema-id");
-        let checked = $(this).prop('checked')
-        let numberOfTables = 0;
-        let numberofSelectedTables = 0;
-
-        NUMBER_OF_SELECTED_TABLES += checked ? 1: -1;
-
-        $(`.select-table[data-schema-id=${schemaId}]`).each(function () {
-            numberOfTables++;
-
-            numberofSelectedTables += $(this).prop('checked') ? 1 : 0;
-        })
-
-        $(`.select-all-tables[data-schema-id=${schemaId}]`).prop('checked', numberOfTables === numberofSelectedTables)
-
-        if (NUMBER_OF_SELECTED_TABLES > 0) {
-            $("#action-buttons-container").removeClass('d-none')
-        } else {
-            $("#action-buttons-container").addClass('d-none')
-        }
     })
 
     function init() {
@@ -413,4 +410,156 @@
 
     }
 </script>
+{% endif %}
+
+{% if database %}
+<script>
+    var NUMBER_OF_SELECTED_TABLES = 0;
+    const DATABASE_ID = {{ database.id }}
+
+    function extractFromDatabase() {
+        let schemas = [];
+        let schemaList = {};
+        let targetDatabases = $("#target-databases").val()
+        let startTime = $("#new-extraction-start-time").val()
+
+        startTime = startTime ? startTime : null;
+
+        console.log("Databases chosen: ")
+        console.log(targetDatabases)
+
+        // get all the selected tables
+        $('.select-table:checked').each((index, element) => {
+            schemaID = $(element).attr('data-schema-id')
+            tableID = $(element).attr('data-table-id')
+
+            if (schemaID && tableID) {
+                if (!(schemaID in schemaList)) {
+                    schemas.push({
+                        schema: schemaID,
+                        tables: [
+                            {
+                                table: tableID
+                            }
+                        ]
+                    })
+
+                    // add an object to the schemaList with the schema's index in the schemas array
+                    schemaList[schemaID] = schemas.length - 1
+                } else {
+                    let index = schemaList[schemaID]
+
+                    let schemaObject = schemas[index]
+                    schemaObject.tables.push({
+                        table: tableID
+                    })
+                }
+            }
+        })
+
+        let formData = {
+            start_time: startTime,
+            databases: [{
+                database: DATABASE_ID,
+                schemas: schemas
+            }],
+            target_databases: targetDatabases
+        }
+        console.log(formData)
+
+        $.ajax({
+            url: `http://${location.host}${API_URL}/ferdolt/flux/extractions/`,
+            type: 'POST',
+            headers: {
+                'X-CSRFTOKEN': getCookie("csrftoken")
+            },
+            data: JSON.stringify(formData),
+            contentType: "application/json",
+            success: function(data) {
+                displayMessage("Extraction completed successfully", ["alert", "alert-success", "alert-dismissible"])
+                $("#extract-from-database").modal('hide');
+            },
+            error: function(data) {
+                console.log(data.status)
+
+                switch(data.status) {
+                    case 404:
+                        displayMessage("Error in the url. Please contact the developer")
+                        break;
+                    case 400:
+                        console.log(data.responseJSON)
+                        break;
+                }
+            }
+        })
+    }
+
+    $(function () {
+        $("label[for='new-extraction-start-time'], #new-extraction-start-time-display").daterangepicker({
+            singleDatePicker: true,
+            timePicker: true,
+            showDropdowns: true,
+            minYear: 2022,
+            maxYear: 2030,
+            startDate: moment().startOf('hour'),
+            timePicker24Hour: true,
+            showSecond: true,
+            showMilliSecond: true,
+            locale: {
+                format: 'YYYY-MM-DD HH:mm:ss'
+            }
+        }, function (start, end, label) {
+            let datetime = start.format('YYYY-MM-DD HH:mm:ss')
+            console.log(`Datetime has been picked, value picked: ${datetime}`)
+
+            $("#new-extraction-start-time").val(datetime)
+        });
+    });
+
+    $(".select-all-tables").change(function () {
+        schemaId = $(this).attr('data-schema-id')
+        const schema = $(this);
+        const checked = $(this).is(':checked');
+
+        $(`.select-table[data-schema-id=${schemaId}]`).each(function () {
+            $(this).prop('checked', checked)
+
+            if (checked) {
+                NUMBER_OF_SELECTED_TABLES += 1;
+            } else {
+                NUMBER_OF_SELECTED_TABLES -= 1;
+            }
+        })
+
+        if (NUMBER_OF_SELECTED_TABLES > 0) {
+            $("#action-buttons-container").removeClass('d-none')
+        } else {
+            $("#action-buttons-container").addClass('d-none')
+        }
+    })
+
+    $('.select-table').change(function () {
+        let schemaId = $(this).attr("data-schema-id");
+        let checked = $(this).prop('checked')
+        let numberOfTables = 0;
+        let numberofSelectedTables = 0;
+
+        NUMBER_OF_SELECTED_TABLES += checked ? 1 : -1;
+
+        $(`.select-table[data-schema-id=${schemaId}]`).each(function () {
+            numberOfTables++;
+
+            numberofSelectedTables += $(this).prop('checked') ? 1 : 0;
+        })
+
+        $(`.select-all-tables[data-schema-id=${schemaId}]`).prop('checked', numberOfTables === numberofSelectedTables)
+
+        if (NUMBER_OF_SELECTED_TABLES > 0) {
+            $("#action-buttons-container").removeClass('d-none')
+        } else {
+            $("#action-buttons-container").addClass('d-none')
+        }
+    })
+</script>
+{% endif %}
 {% endblock %}

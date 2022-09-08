@@ -118,13 +118,16 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                     if connection:
                         cursor = connection.cursor()
 
-                        # get the list of files (not extracted from this database) that have not been applied on the database
-                        unapplied_files = models.File.objects.filter(~Q(id__in=database_record.synchronizationdatabase_set.values("synchronization__file__id") ) & ~Q(id__in=database_record.extractiondatabase_set.values("extraction__file__id")) )
+                        database_record.extractiontargetdatabase_set.filter(is_applied=False)
+                        
+                        unapplied_extractions = database_record.extractiontargetdatabase_set.filter(is_applied=False)
 
                         temporary_tables_created = set([])
+                        time_applied = timezone.now()
 
-                        for file in unapplied_files:
-                            file_path = file.file.path
+                        for extraction in unapplied_extractions:
+                            file_path = extraction.extraction.file.file.path
+                            file = extraction.extraction.file
 
                             try:
                                 with open( file_path ) as __:
@@ -133,6 +136,7 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                     content = content.decode('utf-8')
 
                                     logging.debug("[In flux.views.SynchronizationViewSet.create] reading the unapplied synchronization file")
+                                    
                                     try:
                                         dictionary: dict = json.loads(content)
                                         # if there is more than one key in the extraction file check if a key with the database's name exists in the file
@@ -149,7 +153,9 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                             # we order by levels (ascending) in order to avoid integrity errors
                                             # tables with the lowest levels are those with the least number of foreign key relationships
                                             # it's also not just about number but the depth of those relationships i.e. Child -> Parent -> Grand parent -> Adam in this case the child's level is 3
-                                            tables = ferdolt_models.Table.objects.filter( Q(schema__database=database_record) & ~Q(name__icontains='_deletion') ).order_by('level')
+                                            tables = ferdolt_models.Table.objects.filter( 
+                                                Q(schema__database=database_record) & 
+                                                ~Q(name__icontains='_deletion') ).order_by('level')
 
                                             for table in tables:
                                                 table_name = table.name.lower()
@@ -304,6 +310,11 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                             if flag:
                                                 synchronized_databases.append(database_record)
                                                 connection.commit()
+                                                
+                                                extraction.is_applied=True
+                                                extraction.time_applied = time_applied
+
+                                                extraction.save()
                                         
                                     except json.JSONDecodeError as e:
                                         logging.error( f"[In flux.views.SynchronizationViewSet.create]. Error parsing json from file for database synchronization. File path: {file_path}" )

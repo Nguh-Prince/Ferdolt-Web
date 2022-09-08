@@ -448,11 +448,13 @@ function displayMessage(message, classes = ['alert-danger', 'alert-dismissible']
     $(alert).append(button)
 
     $("#messages").append(alert)
+    $("#messages").addClass('active')
 
     if (timeout) {
         // closing the message after timeout milliseconds
         setTimeout(function () {
             $(button).click()
+            $("#messages").removeClass('active')
         }, timeout)
     }
 }
