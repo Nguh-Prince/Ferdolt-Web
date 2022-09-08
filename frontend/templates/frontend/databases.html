@@ -13,95 +13,101 @@
 {% endblock %}
 
 {% block page_content %}
-<div class="page-content">
-    <div class="container-fluid">
-        {% if not database %}
-        <div class="row">
-            <div class="col-sm-12">
-                <div class="page-title-box">
-                    <div class="row justify-content-end">
-                        <div class="col-auto align-self-center">
-                            <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
-                                data-bs-target="#new-database-modal">
-                                <i class="fas fa-plus me-2"></i>{% trans "Add database" %}
+<div class="container-fluid">
+    {% if not database %}
+    <div class="row">
+        <div class="col-sm-12">
+            <div class="page-title-box">
+                <div class="row justify-content-end">
+                    <div class="col-auto align-self-center">
+                        <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                            data-bs-target="#new-database-modal">
+                            <i class="fas fa-plus me-2"></i>{% trans "Add database" %}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row py-2" id="databases">
+
+    </div>
+    {% else %}
+    <div class="row">
+        <div class="col-sm-12">
+            <div class="page-title-box">
+                <div class="row">
+                    <div class="col-md-6 justify-content-start">
+                        <div class="col-auto align-self center d-none" id="action-buttons-container">
+                            <button class="btn btn-outline-orange btn-sm mx-2" id="delete-many">
+                                <i data-feather="upload" style="width: 16; height: 16;"></i> Extract
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="row py-2" id="databases">
-
-        </div>
-        {% else %}
-        <!-- Create nested accordions for the schemas, tables and columns -->
-        <div class="accordion" id="main-accordion">
-            {% for schema in database.databaseschema_set.all %}
-            <div class="accordion-item">
-                <h2 class="accordion-header" id="{{ database.name }}{{ database.id }}{{schema.name}}itemheader">
-                    <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                        data-bs-target="#{{ database.name }}{{ database.id }}{{schema.name}}itemcollapse"
-                        >
-                        <input type="checkbox" class="form-check-input mx-2 select-all-tables"
-                            data-schema-id="{{ schema.id }}" /> {{ schema.name }}
-                    </button>
-                </h2>
-                <div class="accordion-collapse collapse show"
-                    aria-labelledby="{{ database.name }}{{ database.id }}{{schema.name}}itemheader"
-                    id="{{ database.name }}{{ database.id }}{{schema.name}}itemcollapse">
-                    <div class="accordion-body">
-                        <div class="accordion"
-                            id="{{ database.name }}{{ database.id }}{{schema.name}}itemaccordion">
-                            {% for table in schema.table_set.all %}
-                            <div class="accordion-item">
-                                <h2 class="accordion-header"
-                                    id="{{ database.name }}{{ database.id }}{{schema.name}}{{ table.name }}item-header">
-                                    <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                                        data-bs-target="#{{ database.name }}{{ database.id }}{{schema.name}}{{ table.name }}itemcollapse"
-                                        
-                                        >
-                                            <input type="checkbox" class="form-check-input mx-2 select-table"
-                                                data-table-id="{{ table.id }}" data-schema-id="{{ schema.id }}" /> {{ table.name }}</button>
-                                </h2>
-                                <div class="accordion-collapse collapse"
-                                    aria-labelledby="{{ database.name }}{{ database.id }}{{schema.name}}{{ table.name }}itemheader"
-                                    id="{{ database.name }}{{ database.id }}{{schema.name}}{{ table.name }}item-collapse">
-                                    <div class="accordion-body">
-                                        <table class="table table-striped">
-                                            <thead>
-                                                <tr>
-                                                    <th>{% trans "Column name" %}</th>
-                                                    <th>{% trans "Data type" %}</th>
-                                                    <th>{% trans "Character max." %}</th>
-                                                    <th>{% trans "Datetime precision" %}</th>
-                                                    <th>{% trans "Numeric precision" %}</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {% for column in table.column_set.all %}
-                                                <tr>
-                                                    <td>{{ column.name }}</td>
-                                                    <td>{{ column.data_type }}</td>
-                                                    <td>{{ column.character_maximum_length }}</td>
-                                                    <td>{{ column.datetime_precision }}</td>
-                                                    <td>{{ column.numeric_precision }}</td>
-                                                </tr>
-                                                {% endfor %}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
     </div>
+    <!-- Create nested accordions for the schemas, tables and columns -->
+    <ul class="cd-accordion cd-accordion--animated margin-top-lg margin-bottom-lg">
+        {% for schema in database.databaseschema_set.all %}
+        <li class="cd-accordion__item cd-accordion__item--has-children">
+            <input type="checkbox" class="cd-accordion__input" name="{{ schema.name.lower }}-{{schema.id}}"
+                id="{{ schema.name.lower }}-{{schema.id}}" checked>
+            
+            <label for="{{ schema.name.lower }}-{{schema.id}}"
+                class="cd-accordion__label cd-accordion__label--icon-folder">
+                <input type="checkbox" class="mx-2 select-all-tables" 
+                name="select-{{ schema.name.lower }}-{{schema.id}}" 
+                data-schema-id="{{ schema.id }}">
+                <span>{{ schema.name }}</span></label>
+
+            <ul class="cd-accordion__sub cd-accordion__sub-11">
+                {% for table in schema.table_set.all %}
+                <li class="cd-accordion__item cd-accordion__item--has-children">
+                    <input class="cd-accordion__input" type="checkbox" name="{{ table.name.lower }}-{{table.id}}"
+                        id="{{ table.name.lower }}-{{table.id}}">
+                    <label class="cd-accordion__label cd-accordion__label--icon-folder"
+                        for="{{ table.name.lower }}-{{table.id}}">
+                        <input type="checkbox" class="mx-2 select-table" 
+                        data-schema-id="{{ schema.id }}" 
+                        name="select-{{ table.name.lower }}-{{table.id}}">
+                        <span>{{ table.name }}</span></label>
+
+                    <ul class="cd-accordion__sub cd-accordion__sub--l2">
+                        <li class="cd-accordion__item">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>{% trans "Column name" %}</th>
+                                        <th>{% trans "Data type" %}</th>
+                                        <th>{% trans "Character max." %}</th>
+                                        <th>{% trans "Datetime precision" %}</th>
+                                        <th>{% trans "Numeric precision" %}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for column in table.column_set.all %}
+                                    <tr>
+                                        <td>{{ column.name }}</td>
+                                        <td>{{ column.data_type }}</td>
+                                        <td>{{ column.character_maximum_length }}</td>
+                                        <td>{{ column.datetime_precision }}</td>
+                                        <td>{{ column.numeric_precision }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </li>
+                    </ul>
+                </li>
+                {% endfor %}
+            </ul>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -170,6 +176,8 @@
 
 {% block extra_js %}
 <script>
+    var NUMBER_OF_SELECTED_TABLES = 0;
+
     $(document).ready(function () {
         console.log("Doc is ready...")
         // get the databases from the API
@@ -197,24 +205,6 @@
         })
     })
 
-    $('.accordion-button').click(function() {
-        console.log("Clicked an accordion button")
-
-        target = $(this).attr('data-bs-target')
-
-        if (target) {
-            $(`${target}`).toggleClass('show')
-
-            targetElement = document.querySelector(target)
-            console.log(`The target element is `)
-            console.log(targetElement)
-
-            targetElement.classList.toggle('show')
-
-            console.log('Toggled element successfully, I hope.')
-        }
-    })
-
     $(".select-all-tables").change(function () {
         schemaId = $(this).attr('data-schema-id')
         const schema = $(this);
@@ -222,13 +212,28 @@
 
         $(`.select-table[data-schema-id=${schemaId}]`).each(function () {
             $(this).prop('checked', checked)
+
+            if (checked) {
+                NUMBER_OF_SELECTED_TABLES += 1;
+            } else {
+                NUMBER_OF_SELECTED_TABLES -= 1;
+            }
         })
+
+        if (NUMBER_OF_SELECTED_TABLES > 0) {
+            $("#action-buttons-container").removeClass('d-none')
+        } else {
+            $("#action-buttons-container").addClass('d-none')
+        }
     })
 
     $('.select-table').change(function () {
-        schemaId = $(this).attr("data-schema-id");
-        numberOfTables = 0;
-        numberofSelectedTables = 0;
+        let schemaId = $(this).attr("data-schema-id");
+        let checked = $(this).prop('checked')
+        let numberOfTables = 0;
+        let numberofSelectedTables = 0;
+
+        NUMBER_OF_SELECTED_TABLES += checked ? 1: -1;
 
         $(`.select-table[data-schema-id=${schemaId}]`).each(function () {
             numberOfTables++;
@@ -237,6 +242,12 @@
         })
 
         $(`.select-all-tables[data-schema-id=${schemaId}]`).prop('checked', numberOfTables === numberofSelectedTables)
+
+        if (NUMBER_OF_SELECTED_TABLES > 0) {
+            $("#action-buttons-container").removeClass('d-none')
+        } else {
+            $("#action-buttons-container").addClass('d-none')
+        }
     })
 
     function init() {
@@ -259,7 +270,7 @@
         }
     }
 
-    function displayDatabase(databaseObject, containerSelector="#databases") {
+    function displayDatabase(databaseObject, containerSelector = "#databases") {
         console.log("Creating card...")
 
         let card = createElementsRecursively(

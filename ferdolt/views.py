@@ -111,7 +111,9 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
             connection.close()
         else:
-            return Response( data={'message': "Error connecting to the database. Please check your credentials and ensure your database is running"}, 
+            breakpoint()
+            return Response( data={'message': """Error connecting to the database. 
+            Please check your credentials and ensure your database is running"""}, 
             status=status.HTTP_400_BAD_REQUEST )
 
         return Response(data=records)

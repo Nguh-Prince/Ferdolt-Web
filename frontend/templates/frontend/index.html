@@ -1,6 +1,17 @@
 {% extends 'frontend/base-template.html' %}
 {% load i18n static %}
 
+{% block extra_styles %}
+<style>
+    .daterangepicker.ltr.show-ranges.opensleft {
+        display: none;
+    }
+    ul.cd-accordion, ul.cd-accordion__sub {
+        list-style-type: none;
+    }
+</style>
+{% endblock %}
+
 {% block page_content %}
 <div class="container-fluid">
     <div class="row">
@@ -10,7 +21,6 @@
                     <div class="col">
                         <h4 class="page-title">{% trans 'Statistics' %}</h4>
                         <ol class="breadcrumb">
-                            <li class="breadcrumb-item"><a href="javascript:void(0);">NDJANGI</a></li>
                             <li class="breadcrumb-item active">Dashboard</li>
                         </ol>
                     </div>
@@ -46,11 +56,12 @@
                                     <p class="text-dark mb-0 fw-semibold">{% trans 'Databases' %}</p>
                                     <h3 class="m-0">{{ database_count }}</h3>
                                     <p class="mb-0 text-truncate text-muted"><span class="text-success"><i
-                                                class="mdi mdi-trending-up"></i>{{ today_database_count }}</span> Databases Today</p>
+                                                class="mdi mdi-trending-up"></i>{{ today_database_count }}</span>
+                                        Databases Today</p>
                                 </div>
                                 <div class="col-auto align-self-center">
                                     <div class="report-main-icon bg-light-alt">
-                                        <i data-feather="clock" class="align-self-center text-muted icon-sm"></i>
+                                        <i data-feather="database" class="align-self-center text-muted icon-sm"></i>
                                     </div>
                                 </div>
                             </div>
@@ -68,12 +79,13 @@
                                     <p class="text-dark mb-0 fw-semibold">{% trans 'Extractions' %}</p>
                                     <h3 class="m-0">{{ extraction_count }}</h3>
                                     <p class="mb-0 text-truncate text-muted"><span class="text-success"><i
-                                                class="mdi mdi-trending-up"></i>{{today_extraction_count}}</span> {% trans 'Extractions Today' %}
+                                                class="mdi mdi-trending-up"></i>{{today_extraction_count}}</span> {%
+                                        trans 'Extractions Today' %}
                                     </p>
                                 </div>
                                 <div class="col-auto align-self-center">
                                     <div class="report-main-icon bg-light-alt">
-                                        <i data-feather="users" class="align-self-center text-muted icon-sm"></i>
+                                        <i data-feather="upload" class="align-self-center text-muted icon-sm"></i>
                                     </div>
                                 </div>
                             </div>
@@ -91,11 +103,12 @@
                                     <p class="text-dark mb-0 fw-semibold">{% trans 'Synchronizations' %}</p>
                                     <h3 class="m-0">{{synchronization_count}}</h3>
                                     <p class="mb-0 text-truncate text-muted"><span class="text-success"><i
-                                                class="mdi mdi-trending-up"></i>{{today_synchronization_count}}</span> {% trans 'Synchronizations Today' %}</p>
+                                                class="mdi mdi-trending-up"></i>{{today_synchronization_count}}</span>
+                                        {% trans 'Synchronizations Today' %}</p>
                                 </div>
                                 <div class="col-auto align-self-center">
                                     <div class="report-main-icon bg-light-alt">
-                                        <i data-feather="briefcase" class="align-self-center text-muted icon-sm"></i>
+                                        <i data-feather="download" class="align-self-center text-muted icon-sm"></i>
                                     </div>
                                 </div>
                             </div>
@@ -132,31 +145,17 @@
                 <div class="card-header">
                     <div class="row align-items-center">
                         <div class="col">
-                            <h4 class="card-title">Audience Overview</h4>
+                            <h4 class="card-title">{% trans 'Activity overview' %}</h4>
                         </div>
-                        <!--end col-->
-                        <div class="col-auto">
-                            <div class="dropdown">
-                                <a href="#" class="btn btn-sm btn-outline-light dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                    This Year<i class="las la-angle-down ms-1"></i>
-                                </a>
-                                <div class="dropdown-menu dropdown-menu-end">
-                                    <a class="dropdown-item" href="#">Today</a>
-                                    <a class="dropdown-item" href="#">Last Week</a>
-                                    <a class="dropdown-item" href="#">Last Month</a>
-                                    <a class="dropdown-item" href="#">This Year</a>
-                                </div>
-                            </div>
-                        </div>
-                        <!--end col-->
                     </div>
                     <!--end row-->
                 </div>
                 <!--end card-header-->
                 <div class="card-body">
-                    <div class="">
-                        <div id="ana_dash_1" class="apex-charts"></div>
+                    <div class="row">
+                        <div id="ana_dash_1" class="apex-charts w-100">
+                            <canvas id="overview" class="w-100" style="height: 240px;"></canvas>
+                        </div>
                     </div>
                 </div>
                 <!--end card-body-->
@@ -169,19 +168,16 @@
                 <div class="card-header">
                     <div class="row align-items-center">
                         <div class="col">
-                            <h4 class="card-title">Sessions Device</h4>
+                            <h4 class="card-title">{% trans 'Databases' %}</h4>
                         </div>
                         <!--end col-->
                         <div class="col-auto">
                             <div class="dropdown">
-                                <a href="#" class="btn btn-sm btn-outline-light dropdown-toggle"
-                                    data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                <a href="{% url 'frontend:databases' %}"
+                                    class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown"
+                                    aria-haspopup="true" aria-expanded="false">
                                     All<i class="las la-angle-down ms-1"></i>
                                 </a>
-                                <div class="dropdown-menu dropdown-menu-end">
-                                    <a class="dropdown-item" href="#">Purchases</a>
-                                    <a class="dropdown-item" href="#">Emails</a>
-                                </div>
                             </div>
                         </div>
                         <!--end col-->
@@ -190,42 +186,23 @@
                 </div>
                 <!--end card-header-->
                 <div class="card-body">
-                    <div class="text-center">
-                        <div id="ana_device" class="apex-charts"></div>
-                        <h6 class="bg-light-alt py-3 px-2 mb-0">
-                            <i data-feather="calendar" class="align-self-center icon-xs me-1"></i>
-                            01 January 2020 to 31 December 2020
-                        </h6>
-                    </div>
                     <div class="table-responsive mt-2">
                         <table class="table border-dashed mb-0">
                             <thead>
                                 <tr>
-                                    <th>Device</th>
-                                    <th class="text-end">Sassions</th>
-                                    <th class="text-end">Day</th>
-                                    <th class="text-end">Week</th>
+                                    <th>Database</th>
+                                    <th class="text-end">{% trans 'Extractions' %}</th>
+                                    <th class="text-end">{% trans 'Synchronizations' %}</th>
                                 </tr>
                             </thead>
                             <tbody>
+                                {% for database in databases %}
                                 <tr>
-                                    <td>Dasktops</td>
-                                    <td class="text-end">1843</td>
-                                    <td class="text-end">-3</td>
-                                    <td class="text-end">-12</td>
+                                    <td>{{ database.name }}</td>
+                                    <td>{{ database.extractiondatabase_set.count }}</td>
+                                    <td>{{ database.synchronizationdatabase_set.count }}</td>
                                 </tr>
-                                <tr>
-                                    <td>Tablets</td>
-                                    <td class="text-end">2543</td>
-                                    <td class="text-end">-5</td>
-                                    <td class="text-end">-2</td>
-                                </tr>
-                                <tr>
-                                    <td>Mobiles</td>
-                                    <td class="text-end">3654</td>
-                                    <td class="text-end">-5</td>
-                                    <td class="text-end">-6</td>
-                                </tr>
+                                {% endfor %}
 
                             </tbody>
                         </table>
@@ -240,4 +217,99 @@
         <!--end col-->
     </div>
 </div>
+
+<ul class="cd-accordion margin-top-lg margin-bottom-lg">
+    <li class="cd-accordion__item cd-accordion__item--has-children">
+        <input class="cd-accordion__input" type="checkbox" name="group-1" id="group-1">
+        <label class="cd-accordion__label cd-accordion__label--icon-folder" for="group-1"><span>Group 1</span></label>
+
+        <ul class="cd-accordion__sub cd-accordion__sub--l1">
+            <li class="cd-accordion__item cd-accordion__item--has-children">
+                <input class="cd-accordion__input" type="checkbox" name="sub-group-1" id="sub-group-1">
+                <label class="cd-accordion__label cd-accordion__label--icon-folder" for="sub-group-1"><span>Sub Group
+                        1</span></label>
+
+                <ul class="cd-accordion__sub cd-accordion__sub--l2">
+                    <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
+                            href="#0"><span>Image</span></a></li>
+                    <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
+                            href="#0"><span>Image</span></a></li>
+                    <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
+                            href="#0"><span>Image</span></a></li>
+                </ul>
+            </li>
+
+            <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
+                    href="#0"><span>Image</span></a></li>
+            <li class="cd-accordion__item"><a class="cd-accordion__label cd-accordion__label--icon-img"
+                    href="#0"><span>Image</span></a></li>
+        </ul>
+    </li>
+
+    <li class="cd-accordion__item cd-accordion__item--has-children">
+        <a class="cd-accordion__label cd-accordion__label--icon-img" href="#0"><span>Image</span></a>
+    </li>
+    <li class="cd-accordion__item cd-accordion__item--has-children">
+        <a class="cd-accordion__label cd-accordion__label--icon-img" href="#0"><span>Image</span></a>
+    </li>
+</ul> <!-- cd-accordion -->
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'frontend/plugins/chartjs/chart.min.js' %}"></script>
+<script>
+    ch = '{{ chartInfo }}'
+    const chartInfo = {
+        "databases": ["bikestores", "dvdrental", "bikestores2", "bikestores4", "new_database", "bikestores5"],
+        "number_of_extractions": [10, 1, 0, 1, 0, 0],
+        "data_extracted": [4.4, 8.76, 0.0, 1.85, 0.0, 0.0],
+        "number_of_synchronizations": [1, 0, 0, 4, 11, 12]
+    }
+
+    const overviewCtx = document.getElementById("overview").getContext('2d')
+
+    const data = {
+        labels: chartInfo['databases'],
+        datasets: [
+            {
+                label: "Nb. extractions",
+                data: chartInfo['number_of_extractions'],
+                borderColor: '#8bc7cf',
+                backgroundColor: '#8bc7cf'
+            },
+            {
+                label: 'Nb. synchronizations',
+                data: chartInfo['number_of_synchronizations'],
+                borderColor: '#ffe6b1',
+                backgroundColor: '#ffe6b1'
+            },
+            {
+                label: 'Data extracted (mb)',
+                data: chartInfo['data_extracted'],
+                borderColor: '#c3dd7',
+                backgroundColor: '#c3cdd7'
+            }
+        ]
+    }
+
+    const config = {
+        type: 'bar',
+        data: data,
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Chart.js Bar Chart'
+                }
+            }
+        },
+    };
+
+    const overviewChart = new Chart(overviewCtx, config)
+
+</script>
 {% endblock %}

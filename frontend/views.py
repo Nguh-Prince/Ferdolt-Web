@@ -1,8 +1,10 @@
 from datetime import timedelta
 import io
+import json
 import re
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Max, Sum
+from django.db.models.functions import Coalesce
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import render, redirect
 from django.utils import timezone
@@ -14,6 +16,26 @@ from ferdolt import models as ferdolt_models
 from flux import models as flux_models
 
 from core.functions import get_column_datatype, get_database_connection, sql_server_regex, postgresql_regex
+
+def get_file_size_and_unit(size, number_of_decimal_places=2):
+    return_size = size
+    unit = 'bytes'
+    conversion_rate = 1
+
+    if size >= 1024 ** 3:
+        conversion_rate = 1024 ** 3
+        return_size = round(size / 1024**3, number_of_decimal_places)
+        unit = 'Gb'
+    elif size >= 1024 ** 2:
+        conversion_rate = 1024 ** 2
+        return_size = round(size / 1024**2, number_of_decimal_places)
+        unit = 'Mb'
+    elif size >= 1024:
+        conversion_rate = 1024
+        return_size = round(size / 1024, number_of_decimal_places)
+        unit = 'Kb'
+    
+    return (return_size, unit, conversion_rate)
 
 ################################################################################################
 # Views
@@ -42,24 +64,37 @@ def index(request):
     size = data_extracted['data_extracted']
     unit = None
 
-    if size >= 1024 ** 3:
-        data_extracted['data_extracted'] = round(size / 1024**3, 2)
-        unit = 'Gb'
-    elif size >= 1024 ** 2:
-        data_extracted['data_extracted'] = round(size / 1024**2, 2)
-        unit = 'Mb'
-    elif size >= 1024:
-        data_extracted['data_extracted'] = round(size / 1024, 2)
-        unit = 'Kb'
-    else:
-        unit = 'bytes'
-
     today_extractions = extractions.filter( time_made__gte=now-delta )
 
     synchronizations = flux_models.Synchronization.objects.all()
     synchronization_count = synchronizations.count()
 
     today_synchronizations = synchronizations.filter( time_received__gte=now-delta )
+
+    database_names = [ f.name for f in databases ]
+    max_total_extraction_size = (extractions.values("extractiondatabase__database__id")
+        .annotate(size=Sum("file__size")).aggregate(Max("size"))
+    )['size__max']
+
+    data = {
+        'databases': database_names,
+        'number_of_extractions': [],
+        'data_extracted': [],
+        'number_of_synchronizations': [],
+        'unit': 'bytes'
+    }
+    
+    unit_size = get_file_size_and_unit(max_total_extraction_size)
+    data['unit'] = unit_size[1]
+
+    for database in databases:
+        total_extraction_size = database.extractiondatabase_set.aggregate( data_extracted=Coalesce( Sum( "extraction__file__size" ), 0.0 ) )
+
+        data['number_of_extractions'].append( database.extractiondatabase_set.count() )
+        data['number_of_synchronizations'].append( database.synchronizationdatabase_set.count() )
+        data['data_extracted'].append( round(total_extraction_size['data_extracted'] / unit_size[2], 2) )
+
+    unit_and_size = get_file_size_and_unit( data_extracted['data_extracted'])
 
     context={
         'databases': databases[:5],
@@ -70,9 +105,10 @@ def index(request):
         'synchronization_count': synchronization_count,
         'today_synchronization_count':today_synchronizations.count(),
         'data_extracted': {
-            'size': data_extracted['data_extracted'],
-            'unit': unit
-        }
+            'size': unit_and_size[0],
+            'unit': unit_and_size[1]
+        },
+        'chartInfo': json.dumps(data)
     }
 
     return render(request, "frontend/index.html", context=context)

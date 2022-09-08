@@ -54,13 +54,13 @@ def get_database_connection(database: ferdolt_models.Database) -> pyodbc.Cursor:
         driver = "{SQL Server Native Client 11.0}"
         connection_string = (
             f"Driver={driver};"
-            f"Server={database.host};"
+            f"Server={database.get_host};"
             f"Database={database.name};"
-            f"UID={database.username};"
+            f"UID={database.get_username};"
             )
         try:
             # we append the password here instead of above for security reasons as we will be logging the connection string in case of errors
-            connection = pyodbc.connect(connection_string + f"PWD={database.password};")
+            connection = pyodbc.connect(connection_string + f"PWD={database.get_password};")
             return connection
         except pyodbc.ProgrammingError as e:
             print(_("Error connecting to the %(database_name)s database"))
@@ -70,11 +70,11 @@ def get_database_connection(database: ferdolt_models.Database) -> pyodbc.Cursor:
             return None
     
     if postgresql_regex.search(dbms_name):
-        connection_string = f"dbname={database.name.lower()} user={database.username} host={database.host} "
+        connection_string = f"dbname={database.name.lower()} user={database.get_username} host={database.get_host} "
         
         try:
             # we append the password here instead of above for security reasons as we will be logging the connection string in case of errors
-            connection = psycopg.connect(connection_string + f"password={database.password}")
+            connection = psycopg.connect(connection_string + f"password={database.get_password}")
             return connection
         except psycopg.OperationalError as e:
             logging.error(f"Error connecting to the Postgres database {database.name} on {database.host}:{database.port}. Connection string: '{connection_string}'. Error: {str(e)}")

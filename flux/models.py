@@ -33,9 +33,22 @@ class Extraction(models.Model):
     # i.e. SELECT * FROM table WHERE last_updated > start_time
     start_time = models.DateTimeField(null=True)
 
-class ExtractionDatabase(models.Model):
+class ExtractionTargetDatabase(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE)
+    is_applied = models.BooleanField(default=False)
+
+class ExtractionSourceDatabase(models.Model):
+    extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
+    database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE)
+
+class ExtractionSourceDatabaseSchema(models.Model):
+    extraction_database = models.ForeignKey(ExtractionSourceDatabase, on_delete=models.CASCADE)
+    schema = models.ForeignKey(ferdolt_models.DatabaseSchema, on_delete=models.CASCADE)
+
+class ExtractionSourceTable(models.Model):
+    extraction_database_schema = models.ForeignKey(ExtractionSourceDatabaseSchema, on_delete=models.CASCADE)
+    table = models.ForeignKey(ferdolt_models.Table, on_delete=models.CASCADE)
 
 class Synchronization(models.Model):
     time_received = models.DateTimeField(auto_now_add=True)

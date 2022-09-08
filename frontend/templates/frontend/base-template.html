@@ -12,11 +12,12 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
     <!-- App favicon -->
-    <link rel="shortcut icon" href="assets/images/favicon.ico">
+    <link rel="shortcut icon" href="{% static 'frontend/assets/images/favicon.ico' %}">
 
     <link href="{% static 'frontend/plugins/jvectormap/jquery-jvectormap-2.0.2.css' %}" rel="stylesheet">
 
     <!-- App css -->
+    <link rel="stylesheet" href="{% static 'frontend/accordion/css/style.css' %}">
     <link rel="stylesheet" href="{% static 'frontend/assets/css/app.min.css' %}">
     <link href="{% static 'frontend/assets/css/bootstrap.min.css' %}" rel="stylesheet" type="text/css" />
     <link href="{% static 'frontend/assets/css/icons.min.css' %}" r el="stylesheet" type="text/css" />
@@ -27,6 +28,12 @@
     <style>
         .page-wrapper {
             overflow-x: scroll;
+        }
+        .top-bar {
+            margin-top: 64px;
+        }
+        .cd-accordion {
+            background-color: white;
         }
     </style>
 
@@ -78,9 +85,9 @@
                     </ul>
                 </li>
 
-                <li class="nav-item"><a class="nav-link" href="{% url 'frontend:servers' %}"><i
+                <!-- <li class="nav-item"><a class="nav-link" href="{% url 'frontend:servers' %}"><i
                             data-feather="hard-drive" class="align-self-center menu-icon"></i>{% trans "Servers" %}</a>
-                </li>
+                </li> -->
 
                 <li>
                     <a href="javascript: void(0)">
@@ -300,27 +307,33 @@
         </div>
         <!-- Top Bar End -->
 
-        {% block page_content %}
-        {% endblock %}
+        <div class="page-content">
+            <div id="messages" style="z-index: 1300; position: absolute; top: 0;" class="container py-3 px-3"></div>
+            {% block page_content %}
+            
+            {% endblock %}
+        </div>
     </div>
 
     {% block modals %}
     {% endblock %}
-
-    <div id="messages" style="z-index: 1300; position: absolute; top: 0;" class="container py-3 px-3">
         
     </div>
 
 </body>
 
-<!-- jQuery  -->
 <script src="{% static 'frontend/assets/js/bootstrap.bundle.min.js' %}"></script>
 <script src="{% static 'frontend/assets/js/bootstrap.min.js' %}"></script>
 <script src="{% static 'frontend/assets/js/metismenu.min.js' %}"></script>
 <script src="{% static 'frontend/assets/js/waves.js' %}"></script>
 <script src="{% static 'frontend/assets/js/feather.min.js' %}"></script>
 <script src="{% static 'frontend/assets/js/simplebar.min.js' %}"></script>
+<script src="{% static 'frontend/assets/js/moment.js' %}"></script>
+<script src="{% static 'frontend/plugins/daterangepicker/daterangepicker.js' %}"></script>
+<script src="{% static 'frontend/assets/js/jquery.core.js' %}"></script>
 
+<script src="{% static 'frontend/accordion/assets/js/util.js' %}"></script>
+<script src="{% static 'frontend/accordion/assets/js/main.js' %}"></script>
 <!-- App js -->
 <script src="{% static 'frontend/assets/js/app.js' %}"></script>
 <script src="{% static 'frontend/assets/js/functions.js' %}"></script>

@@ -179,6 +179,10 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                             
                             serializer = serializers.GroupExtractionSerializer(group_extraction)
 
+                else:
+                    return Response( data={'message': _('Error connecting to the %(database)s database. Please ensure that the database server is running and your connection credentials are correct'
+                    % {'database': database_record.database})}, status=status.HTTP_400_BAD_REQUEST )
+                    
             return Response( data=serializer.data, status=status.HTTP_201_CREATED )
 
     @action(

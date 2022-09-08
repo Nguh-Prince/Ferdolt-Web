@@ -23,12 +23,12 @@ class Group(models.Model):
 
 class GroupDatabase(models.Model):
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE, null=True)
-    is_writeable = models.BooleanField(default=True) # set this to False if this server does not create data related to this group
-    is_readable = models.BooleanField(default=True) # set this to False if this server does not integrate data from this group
+    can_write = models.BooleanField(default=True) # set this to False if this server does not create data related to this group
+    can_read = models.BooleanField(default=True) # set this to False if this server does not integrate data from this group
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
 
     def clean(self) -> None:
-        if not self.is_writeable and not self.is_readable:
+        if not self.can_write and not self.can_read:
             raise ValidationError(
              _("The group must be writeable or readable") 
             )

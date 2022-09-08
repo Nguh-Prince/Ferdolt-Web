@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import json
 import logging
 import os
@@ -49,7 +50,7 @@ class FluxDatabaseSerializer(serializers.ModelSerializer):
     schemas = FluxSchemaSerializer(many=True, required=False, allow_null=True, source='database.databaseschema_set')
 
     class Meta:
-        model = models.ExtractionDatabase
+        model = models.ExtractionSourceDatabase
         fields = ("id", "name", "host", "port", "schemas")
 
 class FileSerializer(serializers.ModelSerializer):
@@ -62,7 +63,99 @@ class FileSerializer(serializers.ModelSerializer):
         fields = ("id", "file_name", "file_url", "file_size")
 
 class ExtractionSerializer(serializers.ModelSerializer):
-    databases = FluxDatabaseSerializer(many=True, source='extractiondatabase_set')
+    class ExtractionSourceDatabaseSerializer(serializers.ModelSerializer):
+        class ExtractionSourceDatabaseSchemaSerializer(serializers.ModelSerializer):
+            class ExtractionSourceTableSerializer(serializers.ModelSerializer):
+                class Meta:
+                    model = models.ExtractionSourceTable
+                    fields = ("id", "table")
+            
+            tables = ExtractionSourceTableSerializer(many=True, required=False, source='extractionsourcetable_set')
+
+            def validate(self, attrs):
+                validation_errors = []
+
+                schema = attrs['schema']
+
+                if 'tables' in attrs and attrs['tables']:
+                    tables = attrs['tables']
+
+                    for table in tables:
+                        table = table['table']
+
+                        if table not in schema.table_set.all():
+                            validation_errors.append(
+                                serializers.ValidationError( _("No table with id %(id)d exists in the schema with id %(db_id)d" 
+                            % { 'id': table.id, 'db_id': schema.id }) )
+                            )
+
+                else:
+                    tables = []
+
+                    for table in schema.table_set.all():
+                        ordered_dict = OrderedDict()
+                        ordered_dict['table'] = table
+
+                        tables.append(table)
+                    attrs['tables'] = tables
+
+                return attrs
+
+            class Meta:
+                model = models.ExtractionSourceDatabaseSchema
+                fields = ("id", "schema", "tables")
+
+        schemas = ExtractionSourceDatabaseSchemaSerializer(many=True, required=False, source='extractionsourcedatabaseschema_set')
+        class Meta:
+            model = models.ExtractionSourceDatabase
+            fields = ( "id", "database", "schemas" )
+
+        def validate(self, attrs):
+            validation_errors = []
+
+            database = attrs['database']
+
+            if 'schemas' in attrs and attrs['schemas']:
+                schemas = attrs['schemas']
+                for schema in schemas:
+                    if schema['schema'] not in database.databaseschema_set.all():
+                        schema = schema['schema']
+                        validation_errors.append(
+                            serializers.ValidationError( _("No schema with id %(id)d exists in the database with id %(db_id)d" 
+                            % { 'id': schema.id, 'db_id': database.id }) )
+                        )
+                    else:
+                        if 'tables' not in schema:
+                            tables = []
+                            
+                            for table in schema.table_set.all():
+                                ordered_dict = OrderedDict()
+                                ordered_dict['table'] = table
+                                
+                                tables.append(ordered_dict)
+                            
+                            schema['tables'] = tables
+
+            else:
+                # select all the schemas from the database
+                schemas = []
+
+                for schema in database.databaseschema_set.all():
+                    ordered_dict = OrderedDict()
+                    ordered_dict['schema'] = schema
+
+                    schemas.append( ordered_dict )
+                
+                attrs['schemas'] = schemas
+
+            if validation_errors:
+                raise serializers.ValidationError(validation_errors)
+
+            return attrs
+
+    databases = ExtractionSourceDatabaseSerializer(many=True, source='extractionsourcedatabase_set')
+    target_databases = serializers.ListField( child=serializers.IntegerField(), read_only=True ) # list of ids
+
     use_pentaho = serializers.BooleanField(required=False, allow_null=True, write_only=True)
     file_name = serializers.CharField(source="file.file.name", read_only=True)
     file_url = serializers.CharField(source='file.file.url', read_only=True)
@@ -70,9 +163,27 @@ class ExtractionSerializer(serializers.ModelSerializer):
     file_id = serializers.IntegerField(source='file.id', read_only=True)
     use_time = serializers.BooleanField(default=True, required=False)
 
+    def validate_target_databases(self, items):
+        validation_errors = []
+        
+        if not items:
+            raise serializers.ValidationError( _("The target_databases item must be a list with at least one item") )
+
+        for index, item in enumerate(items):
+            try:
+                database = ferdolt_models.Database.objects.get(id=item)
+                items[index] = database
+            except ferdolt_models.Database.DoesNotExist as e:
+                validation_errors.append(
+                    serializers.ValidationError( _("Error on index %(index)d of the target_databases list. No databases exists with id %(id)d" 
+                    % {'index': index+1, 'id': item}) )
+                )
+        
+        return items
+
     class Meta:
         model = models.Extraction
-        fields = ("id", "start_time", "time_made", "databases", "use_pentaho", "file_id", "file_name", "file_url", "file_size", "use_time")
+        fields = ("id", "start_time", "time_made", "databases", "use_pentaho", "file_id", "file_name", "file_url", "file_size", "use_time", "target_databases")
         extra_kwargs = {
             "time_made": {"read_only": True}
         }
@@ -94,8 +205,8 @@ class ExtractionSerializer(serializers.ModelSerializer):
         f = Fernet(settings.FERNET_KEY)
 
         if 'use_pentaho' not in validated_data or not validated_data['use_pentaho']:
-            databases = validated_data.pop("extractiondatabase_set")
-
+            databases = validated_data.pop("extractionsourcedatabase_set")
+            breakpoint()
             start_time = None
             
             # set use_time to False if it is passed as False else True
@@ -111,49 +222,37 @@ class ExtractionSerializer(serializers.ModelSerializer):
             database_records = []
 
             for database in databases:
-                database_record = ferdolt_models.Database.objects.filter(id=database['database']['id'])
+                database_record = database['database']
                 
-                if database_record.exists():
-                    database_record = database_record.first()
-                    
-                    database_records.append(database_record)
-
+                if database_record:
                     database_dictionary = results.setdefault(database_record.name, {})
-                    
-                    # get the last time data was extracted from this database if no start time was provided
-                    if not start_time:
-                        latest_extraction: self.Meta.model = self.Meta.model.objects.filter(extractiondatabase__database=database_record).last()
-
-                        if latest_extraction:
-                            start_time = latest_extraction.time_made
 
                     connection = get_database_connection(database_record)
 
                     if connection:
                         cursor = connection.cursor()
+                        database_records.append(database)
                         
                         schemas = None
+                        schemas_key = 'schemas'
 
-                        if 'databaseschema_set' in database['database'] and database['database']['databaseschema_set']:
-                            schemas = database['database']['databaseschema_set']
-                        else:
-                            schemas = FluxDatabaseSerializer.FluxSchemaSerializer( database_record.databaseschema_set.all(), many=True ).data
+                        if schemas_key in database and database[schemas_key]:
+                            schemas = database[schemas_key]
 
                         for schema in schemas:
                             tables = None
+                            _schema = schema['schema']
 
-                            schema_tables_key = 'table_set'
+                            schema_tables_key = 'tables'
                             if schema_tables_key in schema and schema[schema_tables_key]:
                                 tables = schema[schema_tables_key]
-                            else:
-                                tables = FluxDatabaseSerializer.FluxSchemaSerializer.FluxTableSerializer( ferdolt_models.Table.objects.filter( schema__database=database_record, schema__name=schema['name'] ), many=True ).data
 
                             for _table in tables:
-                                table: ferdolt_models.Table = ferdolt_models.Table.objects.get(schema__name=schema['name'], schema__database=database_record, name=_table['name'])
+                                table: ferdolt_models.Table = _table['table']
                                 
                                 table_query_name = table.get_queryname()
 
-                                schema_dictionary = database_dictionary.setdefault(schema['name'], {})
+                                schema_dictionary = database_dictionary.setdefault(_schema.name, {})
                                 table_results = schema_dictionary.setdefault( table.name, [] )
 
                                 time_field = table.column_set.filter( Q(name='last_updated') | Q(name="deletion_time") )
@@ -192,7 +291,14 @@ class ExtractionSerializer(serializers.ModelSerializer):
                 extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
 
                 for database in database_records:
-                    models.ExtractionDatabase.objects.create( database=database, extraction=extraction )
+                    # create extraction source databases, source schemas and source tables
+                    source_database = models.ExtractionSourceDatabase.objects.create( database=database['database'], extraction=extraction )
+
+                    for schema in schemas:
+                        source_schema = models.ExtractionSourceDatabaseSchema.objects.create(extraction_database=source_database, schema=schema['schema'])
+
+                        for table in schema['tables']:
+                            models.ExtractionSourceTable.objects.create(extraction_database_schema=source_schema, table=table['table'])
             
             os.unlink( filename )
 

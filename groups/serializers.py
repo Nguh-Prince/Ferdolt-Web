@@ -31,7 +31,6 @@ class GroupTableSerializer(serializers.ModelSerializer):
 
 class GroupCreationSerializer(serializers.ModelSerializer):
     class DatabaseSerializer(serializers.ModelSerializer):
-        
         class Meta:
             model = Database
             fields = ("id", "name", "host", "port")
@@ -119,6 +118,12 @@ class ExtractFromGroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.GroupExtraction
         fields = ( "source_database", "target_databases")
+
+    def validate_source_database(self, data):
+        if not data.can_write:
+            raise serializers.ValidationError( _("This database is not allowed to extract into this group") )
+
+        return data
 
     def validate(self, attrs):
         group = attrs['source_database'].group

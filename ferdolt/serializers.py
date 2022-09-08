@@ -49,10 +49,15 @@ class DatabaseSerializer(serializers.ModelSerializer):
     
     schemas = DatabaseSchemas(source='databaseschema_set', many=True, read_only=True)
     version = DatabaseManagementSystemVersionSerializer(source='dbms_version')
+    username = serializers.CharField( source='get_username' )
+    password = serializers.CharField( source='get_password' )
+    host = serializers.CharField( source='get_host' )
+    port = serializers.CharField( source='get_port' )
 
     class Meta: 
         model = models.Database
-        fields = ( "id", "name", "username", "password", 'host', 'port', 'schemas', 'version', 'instance_name' )
+        fields = ( "id", "name", "username", "password", 
+        'host', 'port', 'schemas', 'version', 'instance_name' )
 
     def validate_username(self, data):
         data = encrypt(data)
