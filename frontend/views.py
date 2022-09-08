@@ -197,7 +197,7 @@ def servers(request, id: int=None):
         return render(request, "frontend/servers.html", context={'server': server})
 
 def extractions(request):
-    return render(request, "frontend/extractions.html", context={'extractions': flux_models.Extraction.objects.all()})
+    return render(request, "frontend/extractions.html", context={'extractions': flux_models.Extraction.objects.all(), 'databases': ferdolt_models.Database.objects.all()})
 
 def synchronizations(request):
     return render(request, "frontend/synchronizations.html", context={'synchronizations': flux_models.Synchronization.objects.all()})

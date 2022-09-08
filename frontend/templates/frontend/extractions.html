@@ -80,11 +80,22 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label" for="new-extraction-target-databases">{% trans "Databases" %}</label>
+                    <label for="new-extraction-source-database" class="form-label">
+                        {% trans "Source database" %}
+                    </label>
+                    <select id="new-extraction-source-database" class="form-select">
+                        {% for database in databases %}
+                        <option value="{{ database.id }}">{{ database.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="new-extraction-target-databases">{% trans "Target Databases" %}</label>
                     <select class="form-select" multiple id="new-extraction-target-databases">
-                        <option value="">DB 1 on localhost:12000</option>
-                        <option value="">DB 2 on localhost:4599</option>
-                        <option value="">DB 2 on 192.168.19.25:5432</option>
+                        {% for database in databases %}
+                        <option value="{{ database.id }}">{{ database.name }}</option>
+                        {% endfor %}
                     </select>
                 </div>
             </div>
@@ -151,22 +162,22 @@
     })
 
     function submitNewExtraction() {
-        databaseIDsChosen = $("#new-extraction-target-databases").val()
+        let databaseIDsChosen = $("#new-extraction-target-databases").val()
+        let source = $("#new-extraction-source-database").val()
         
         console.log(databaseIDsChosen)
 
         databasesChosen = []
 
-        if (databaseIDsChosen) {
-            for (let database of state.databases) {
-                if (databaseIDsChosen.includes( `${database['id']}` ) ) {
-                    databasesChosen.push(database)
-                }
-            }
-
+        if (databaseIDsChosen && source) {
             formData = {
                 start_time: $("new-extraction-start-time").val(),
-                databases: databasesChosen
+                target_databases: databaseIDsChosen,
+                databases: [
+                    {
+                        database: source
+                    }
+                ]
             }
 
             console.log(formData)

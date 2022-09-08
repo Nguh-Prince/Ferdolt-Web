@@ -64,6 +64,7 @@ class FileSerializer(serializers.ModelSerializer):
 
 class ExtractionSerializer(serializers.ModelSerializer):
     class ExtractionSourceDatabaseSerializer(serializers.ModelSerializer):
+        
         class ExtractionSourceDatabaseSchemaSerializer(serializers.ModelSerializer):
             class ExtractionSourceTableSerializer(serializers.ModelSerializer):
                 class Meta:
@@ -150,6 +151,15 @@ class ExtractionSerializer(serializers.ModelSerializer):
                 for schema in database.databaseschema_set.all():
                     ordered_dict = OrderedDict()
                     ordered_dict['schema'] = schema
+
+                    ordered_dict[self.schema_tables_key] = []
+
+                    # select all the tables from the schema
+                    for table in schema.table_set.all():
+                        table_ordered_dict = OrderedDict()
+                        table_ordered_dict['table'] = table
+
+                        ordered_dict[self.schema_tables_key].append(table_ordered_dict)
 
                     schemas.append( ordered_dict )
                 
