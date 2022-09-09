@@ -19,6 +19,7 @@ urlpatterns = [
     path('api/ferdolt/', include('ferdolt.urls')),
     path('api/ferdolt/flux/', include('flux.urls')),
     path('api/ferdolt/groups/', include('groups.urls')),
+    path('api/users/', include('users.urls')),
     path('api-auth/', include("rest_framework.urls")),
     path('chat/', include("communication.urls")),
     path("", include("frontend.urls")),

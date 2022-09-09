@@ -12,6 +12,7 @@ from django.utils.translation import gettext as _
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework import permissions as drf_permissions
 from rest_framework.response import Response
 from rest_framework.serializers import ValidationError
 
@@ -27,6 +28,8 @@ from ferdolt_web.settings import FERNET_KEY
 from frontend.views import get_database_connection
 
 class FileViewSet(viewsets.ModelViewSet):
+    permission_classes = [drf_permissions.IsAuthenticated, ]
+
     serializer_class = serializers.FileSerializer
     def get_queryset(self):
         return models.File.objects.all()
@@ -38,6 +41,7 @@ class FileViewSet(viewsets.ModelViewSet):
         return Response( data={"message": _("This method is not allowed")}, status=status.HTTP_401_UNAUTHORIZED )
 
 class ExtractionViewSet(viewsets.ModelViewSet):
+    permission_classes = [drf_permissions.IsAuthenticated, ]
     serializer_class = serializers.ExtractionSerializer
 
     def get_queryset(self):
@@ -57,7 +61,6 @@ class ExtractionViewSet(viewsets.ModelViewSet):
     @action(
         methods=['GET'],
         detail=True,
-        permission_classes=[]
     )
     def content(self, request, *args, **kwargs):
         object = self.get_object()
@@ -105,6 +108,7 @@ def get_column_dictionary(table: ferdolt_models.Table, column_name: str) -> dict
 deletion_table_regex = re.compile("_deletion$")
 
 class SynchronizationViewSet(viewsets.ModelViewSet):
+    permission_classes = [drf_permissions.IsAuthenticated, ]
     serializer_class = serializers.SynchronizationSerializer
 
     def get_queryset(self):
@@ -139,13 +143,12 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
 
                     if connection:
                         cursor = connection.cursor()
-
-                        database_record.extractiontargetdatabase_set.filter(is_applied=False)
                         
                         unapplied_extractions = database_record.extractiontargetdatabase_set.filter(is_applied=False)
 
-                        temporary_tables_created = set([])
                         time_applied = timezone.now()
+
+                        temporary_tables_created = set([])
 
                         for extraction in unapplied_extractions:
                             file_path = extraction.extraction.file.file.path
@@ -178,7 +181,7 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                             tables = ferdolt_models.Table.objects.filter( 
                                                 Q(schema__database=database_record) & 
                                                 ~Q(name__icontains='_deletion') ).order_by('level')
-
+                                                
                                             for table in tables:
                                                 table_name = table.name.lower()
                                                 schema_name = table.schema.name.lower()
@@ -297,10 +300,12 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                                             except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                                                 logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
                                                                 cursor.connection.rollback()
+                                                                breakpoint()
                                                                 flag = False
                                                             except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
                                                                 logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
                                                                 cursor.connection.rollback()
+                                                                breakpoint()
                                                                 flag = False
                                                                 
 
@@ -365,7 +370,7 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
         return Response( data=SynchronizationSerializer(synchronizations, many=True).data )
 
     @action(
-        methods=["DELETE",], permission_classes=[], detail=False
+        methods=["DELETE",], detail=False
     )
     def delete_all(self, request, *args, **kwargs):
         user = request.user

@@ -16,7 +16,7 @@ from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.response import Response
 
-from core.functions import custom_converter, extract_raw
+from core.functions import custom_converter, extract_raw, synchronize_database
 from . import models
 from frontend.views import get_database_connection
 from ferdolt import models as ferdolt_models
@@ -170,8 +170,19 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
             return attrs
 
+    class ExtractionTargetDatabaseSerializer(serializers.ModelSerializer):
+        database_id = serializers.IntegerField(source='database.id')
+        name = serializers.CharField(source='database.name')
+        port = serializers.CharField(source='database.port')
+        host = serializers.CharField(source='database.host')
+
+        class Meta:
+            model = models.ExtractionTargetDatabase
+            fields = ("id", "database_id", "name", "host", "port", "is_applied")
+
     databases = ExtractionSourceDatabaseSerializer(many=True, source='extractionsourcedatabase_set')
     target_databases = serializers.ListField( child=serializers.IntegerField(), write_only=True ) # list of ids
+    synchronize_immediately = serializers.BooleanField(required=False, default=True, write_only=True)
 
     use_pentaho = serializers.BooleanField(required=False, allow_null=True, write_only=True)
     file_name = serializers.CharField(source="file.file.name", read_only=True)
@@ -179,6 +190,8 @@ class ExtractionSerializer(serializers.ModelSerializer):
     file_size = serializers.FloatField(source='file.file.size', read_only=True)
     file_id = serializers.IntegerField(source='file.id', read_only=True)
     use_time = serializers.BooleanField(default=True, required=False)
+
+    targets = ExtractionTargetDatabaseSerializer(many=True, source='extractiontargetdatabase_set', read_only=True)
 
     def validate_target_databases(self, items):
         validation_errors = []
@@ -200,9 +213,15 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
         return items
 
+    def validate(self, attrs):
+        if 'synchronize_immediately' not in attrs:
+            attrs['synchronize_immediately'] = True
+
+        return attrs
+
     class Meta:
         model = models.Extraction
-        fields = ("id", "start_time", "time_made", "databases", "use_pentaho", "file_id", "file_name", "file_url", "file_size", "use_time", "target_databases")
+        fields = ("id", "start_time", "time_made", "databases", "use_pentaho", "file_id", "file_name", "file_url", "file_size", "use_time", "target_databases", 'synchronize_immediately', "targets")
         extra_kwargs = {
             "time_made": {"read_only": True}
         }
@@ -325,7 +344,24 @@ class ExtractionSerializer(serializers.ModelSerializer):
                         # record target databases
                         if 'target_databases' in validated_data and validated_data['target_databases']:
                             for database in validated_data['target_databases']:
-                                models.ExtractionTargetDatabase.objects.create(extraction=extraction, database=database, is_applied=False)
+                                synchronized_flag = False
+
+                                try:
+                                    connection = get_database_connection(database)
+
+                                    if connection:
+                                        synchronize_database(connection, database, results)
+                                        flag = True
+                                    else: 
+                                        flag = False
+
+                                except TypeError as e:
+                                    raise e
+                                except Exception as e:
+                                    logging.error(f"The {database.__str__()} database was not synchronized successfully")
+                                    flag = False
+
+                                models.ExtractionTargetDatabase.objects.create(extraction=extraction, database=database, is_applied=synchronized_flag)
 
                 os.unlink( filename )
 

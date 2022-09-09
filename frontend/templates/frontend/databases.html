@@ -45,7 +45,7 @@
                     <div class="col-auto align-self-center d-none" id="action-buttons-container">
                         <button class="btn btn-outline-orange btn-sm mx-2" id="delete-many"
                             data-bs-target="#extract-from-database" data-bs-toggle="modal">
-                            <i data-feather="upload" style="width: 16; height: 16;"></i> Extract
+                            <i data-feather="upload" style="width: 16; height: 16;"></i> {% trans 'Synchronize' %}
                         </button>
                     </div>
                 </div>
@@ -184,13 +184,16 @@
             </div>
 
             <div class="modal-body">
-                <div class="mb-3">
-                    <label for="new-extraction-start-time" class="form-label"
-                        title="{% trans 'Get records from the database that have been created or modified since this time' %}">
-                        {% trans "Extraction start time" %}
-                    </label>
-                    <input type="text" id="new-extraction-start-time-display" class="form-control" readonly>
+                <div class="input-group mb-3">
+                    <input type="text" id="new-extraction-start-time-display" 
+                    class="form-control" readonly 
+                    placeholder="{% trans 'Extraction start time' %}">
                     <input type="datetime" id="new-extraction-start-time" class="d-none">
+                    <div class="input-group-append">
+                        <span class="input-group-text" id="empty-new-extraction-start-time">
+                            <i data-feather="delete"></i>
+                        </span>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label for="target-databases" class="form-label">{% trans 'Target databases' %}</label>
@@ -416,6 +419,12 @@
 <script>
     var NUMBER_OF_SELECTED_TABLES = 0;
     const DATABASE_ID = {{ database.id }}
+
+    $("#empty-new-extraction-start-time").click( () => {
+        console.log("Clicked the bspc button")
+        $('#new-extraction-start-time').val('')
+        $('#new-extraction-start-time-display').val('')
+    } )
 
     function extractFromDatabase() {
         let schemas = [];

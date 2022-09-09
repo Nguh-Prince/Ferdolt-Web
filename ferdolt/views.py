@@ -62,6 +62,18 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         except InvalidDatabaseConnectionParameters as e:
             return Response( {'message': _("Error connecting to the database. Check if the credentials are correct or if the database is running")}, status=status.HTTP_400_BAD_REQUEST )
 
+    def create(self, request, *args, **kwargs):
+        serializer: serializers.DatabaseSerializer = self.get_serializer( data=request.data )
+        serializer.is_valid(raise_exception=True)
+
+        database = serializer.create(serializer.validated_data)
+        try:
+            get_database_details(database)
+        except InvalidDatabaseConnectionParameters as e:
+            logging.error(f"Error connecting to the {database.__str__()}.")
+
+        return super().create(request, *args, **kwargs)
+
 class DatabaseSchemaViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.DatabaseSchemaSerializer
 

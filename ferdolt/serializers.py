@@ -49,29 +49,36 @@ class DatabaseSerializer(serializers.ModelSerializer):
     
     schemas = DatabaseSchemas(source='databaseschema_set', many=True, read_only=True)
     version = DatabaseManagementSystemVersionSerializer(source='dbms_version')
-    username = serializers.CharField( source='get_username' )
-    password = serializers.CharField( source='get_password' )
-    host = serializers.CharField( source='get_host' )
-    port = serializers.CharField( source='get_port' )
+    username = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True)
+    host = serializers.CharField(write_only=True)
+    port = serializers.CharField(write_only=True)
+
+    clear_username = serializers.CharField(read_only=True, source='get_username')
+    clear_password = serializers.CharField(read_only=True, source='get_password')
+    clear_host = serializers.CharField(read_only=True, source='get_host')
+    clear_port = serializers.CharField(read_only=True, source='get_port')
 
     class Meta: 
         model = models.Database
         fields = ( "id", "name", "username", "password", 
-        'host', 'port', 'schemas', 'version', 'instance_name' )
+        'host', 'port', 'schemas', 'version', 'instance_name', "clear_username", "clear_password", 
+        'clear_host', 'clear_port', )
 
     def validate_username(self, data):
-        data = encrypt(data)
+        data = encrypt(data)[1]
         return data
 
     def validate_password(self, data):
-        data = encrypt(data)
+        data = encrypt(data)[1]
+        return data
 
     def validate_host(self, data):
-        data = encrypt(data)
+        data = encrypt(data)[1]
         return data
 
     def validate_port(self, data):
-        data = encrypt(data)
+        data = encrypt(data)[1]
         return data
 
     def create(self, validated_data) -> models.Database:
@@ -91,24 +98,6 @@ class DatabaseSerializer(serializers.ModelSerializer):
 
         instance = self.Meta.model(dbms_version=version, **validated_data)
         instance.save()
-        try:
-            connection = sqlite3.connect(settings.PATH_TO_PENTAHO_DATABASE)
-            cursor = connection.cursor()
-            
-            query = """
-            INSERT INTO Server (server_name, server_ip_address, server_port, server_database_name, server_username, server_password, server_instance_name) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """
-            try:
-                cursor.execute( query, ( instance.name, instance.host, instance.port, instance.name, instance.username, instance.password, instance.instance_name ) )
-            except pyodbc.ProgrammingError as e:
-                logging.error( f"Error executing query: {query}. Error: {str(e)}" )
-
-        except pyodbc.ProgrammingError as e:
-            logging.error( f"Error connecting to the pentaho database. Error: {str(e)}" )
-        except pyodbc.InterfaceError as e:
-            logging.error(
-                f"Error connecting to the pentaho database. Error: {str(e)}"
-            )
 
         return instance
 

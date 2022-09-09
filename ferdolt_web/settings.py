@@ -8,6 +8,7 @@ import environ
 env = environ.Env(
     DEBUG=(bool, True),
     SECRET_KEY=(str, 'django-insecure-=*8sy^+&sru&vcexj*l720sg#8bq%v&2ms(8ew3!xao9t(o64!'),
+    SERVER_ID=(str, 'W2X91')
 )
 
 environ.Env.read_env()
@@ -17,6 +18,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env("SECRET_KEY")
 
 DEBUG = env("DEBUG")
+
+SERVER_ID = env['SERVER_ID']
 
 ALLOWED_HOSTS = []
 
@@ -36,7 +39,9 @@ INSTALLED_APPS = [
     "frontend",
     'flux',
     'channels',
-    'communication'
+    'communication',
+    'users',
+    "rest_framework.authtoken",
 ]
 
 ASGI_APPLICATION = 'ferdolt_web.asgi.application'
@@ -58,10 +63,10 @@ MIDDLEWARE = [
 ]
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.BasicAuthentication",
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',  # <-- And here
         "rest_framework.authentication.SessionAuthentication",
-    ]
+    ],
 }
 
 ROOT_URLCONF = 'ferdolt_web.urls'

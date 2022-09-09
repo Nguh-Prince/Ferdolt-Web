@@ -5,11 +5,11 @@ from django.utils.translation import gettext as _
 import string
 import random
 
-from cryptography.fernet import Fernet
+from cryptography import fernet
 
 from ferdolt_web.settings import FERNET_KEY
 
-f = Fernet(FERNET_KEY)
+f = fernet.Fernet(FERNET_KEY)
 
 class DatabaseManagementSystem(models.Model):
     name = models.CharField(max_length=50, unique=True, null=False)
@@ -54,7 +54,6 @@ class Database(models.Model):
 
     def save(self, *args, **kwargs):
         self.name = self.name.lower()
-        
         return super().save(*args, **kwargs)
     
     @property
@@ -99,6 +98,7 @@ class Table(models.Model):
     name = models.CharField(max_length=100)
     level = models.IntegerField(default=0) # this level is the order in which items should be added to tables to avoid integrity errors 
     # starts with 0 (these are the parent tables with no external foreign keys)
+    deletion_table = models.OneToOneField('self', on_delete=models.SET_NULL, null=True)
 
     class Meta:
         verbose_name = _("Table")
