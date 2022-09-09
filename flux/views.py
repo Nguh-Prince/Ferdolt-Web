@@ -54,6 +54,28 @@ class ExtractionViewSet(viewsets.ModelViewSet):
 
         return super().destroy(request, *args, **kwargs)
 
+    @action(
+        methods=['GET'],
+        detail=True,
+        permission_classes=[]
+    )
+    def content(self, request, *args, **kwargs):
+        object = self.get_object()
+
+        f = Fernet(FERNET_KEY)
+
+        try:
+            content = None
+
+            with open(object.file.file.path) as __:
+                content = __.read()
+                content = f.decrypt( content.encode('utf-8') ).decode('utf-8')
+                
+            return Response( data=json.loads(content) )
+        except FileNotFoundError as e:
+            return Response(data={'message': _("The file was not found. It has either been deleted, moved or renamed")}, 
+            status=status.HTTP_404_NOT_FOUND)
+
 def get_type_and_precision(column_name, column_dictionary) -> str:
     string = f"{column_name} "
     type = column_dictionary['data_type']

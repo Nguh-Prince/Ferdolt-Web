@@ -46,7 +46,7 @@
                         <td>
                             <ul>
                                 {% for database in synchronization.synchronizationdatabase_set.all %}
-                                <li>{{ database.database.name }} on {{ database.database.host }}:{{ database.database.port }}</li>
+                                <li>{{ database.database.name }} on {{ database.database.get_host }}:{{ database.database.get_port }}</li>
                                 {% endfor %}
                             </ul>
                         </td>
