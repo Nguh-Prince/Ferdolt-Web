@@ -19,7 +19,7 @@ SECRET_KEY = env("SECRET_KEY")
 
 DEBUG = env("DEBUG")
 
-SERVER_ID = env['SERVER_ID']
+SERVER_ID = env('SERVER_ID')
 
 ALLOWED_HOSTS = []
 

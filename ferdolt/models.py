@@ -146,7 +146,7 @@ class Table(models.Model):
             return f"{self.schema.name}.{self.name}"
         else:
             return self.name
-
+    
 class Column(models.Model):
     table: Table = models.ForeignKey(Table, on_delete=models.CASCADE)
     name: str = models.CharField(max_length=100)

@@ -1,4 +1,5 @@
 import logging
+from sqlite3 import ProgrammingError
 
 from cryptography.fernet import Fernet
 
@@ -559,10 +560,10 @@ def create_datetime_column_with_default_now_query(table, is_postgres_db=False, i
                 END
         """
 
-def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column, server_id, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, column_name='tracking_id', primary_key_column_data_type='int'):
+def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column, sequence_name, server_id, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, column_name='tracking_id', primary_key_column_data_type='int'):
     if is_sqlserver_db:
         return f"""
-            IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table_name}' AND TABLE_SCHEMA = '{schema_name}' AND COLUMN_NAME = 'tracking_id') 
+            IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table_name}' AND TABLE_SCHEMA = '{schema_name}' AND COLUMN_NAME = '{column_name}') 
                 BEGIN
                     DECLARE @SQL VARCHAR(5000);
                     SET @SQL =  'DECLARE @nextvalue INT; ' -- to set the TrackingId of already existing columns
@@ -575,9 +576,9 @@ def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column
 
                     +	'while @table_id IS NOT NULL '
                     +	'BEGIN '
-                    +		'UPDATE {schema_name}.{table_name} SET tracking_id = ''${server_id}'' + '
+                    +		'UPDATE {schema_name}.{table_name} SET tracking_id = ''{server_id}'' + '
                     +		'FORMAT( CURRENT_TIMESTAMP, ''yyyyMMddHHmmss'' ) + '
-                    +		'RIGHT ( ''0000000000'' + CAST( @nextvalue AS varchar(10)), 10 ); '
+                    +		'RIGHT ( ''00'' + CAST( @nextvalue AS varchar(2)), 2 ); '
 
                     +		'SELECT @table_id = min({primary_key_column}) FROM {schema_name}.{table_name} '
                     +		'WHERE {primary_key_column} > @table_id AND tracking_id IS NULL; '
@@ -589,63 +590,209 @@ def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column
                 END
         """
 
+def get_column_type_and_precision(column) -> str:
+    string = f"{column.name} "
+    type = column.data_type
+
+    if type in ['char', 'nchar', 'varchar', 'nvarchar']:
+        return f"{string} {type}({column.character_maximum_length})"
+
+    if type in ['decimal']:
+        return f"{string} {type}({column.numeric_precision})"
+
+    return f"{string} {type}"
+
+def set_tracking_id_where_null_query_multiple_primary_keys(table, primary_key_columns, server_id, sequence_name, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, column_name='tracking_id'):
+    schema_name = table.schema.name
+    table_name = table.name
+    table_queryname = table.get_queryname()
+
+    if is_sqlserver_db:
+        return f"""
+        IF EXISTS ( SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table.name}' AND TABLE_SCHEMA = '{table_name}' AND COLUMN_NAME = {column_name} )
+        BEGIN
+            DECLARE @SQL VARCHAR(5000);
+            SET @SQL = ' DECLARE @nextvalue INT; ' -- next value for the tracking_id sequence
+            + 'SET @nextvalue = next value for {sequence_name}; '
+            + ' DECLARE @table_id TABLE ( { ', '.join( [ f"{column.name} {column.data_type}" for column in primary_key_columns ] ) } ); '
+            + ' INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM {table_queryname} WHERE tracking_id IS NULL;'
+            + ' WHILE SELECT 1 FROM @table_id '
+            + ' BEGIN '
+                + ' UPDATE {table_queryname} SET tracking_id = ''{server_id}'' +  '
+                + ' FORMAT( CURRENT_TIMESTAMP, ''yyyyMMddHHmmss'' ) + '
+                + ' RIGHT ( ''00'' + CAST( @nextvalue AS varchar(2) ), 2 ); '
+
+                + ' DELETE FROM @table_id; '
+                
+                + ' INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM {table_queryname} WHERE tracking_id IS NULL;'
+                + ' SET @nextvalue = next value for { sequence_name }; '
+            + ' END '
+
+            EXEC(@SQL);
+        END
+        """
+
 def update_datetime_columns_to_now_query(table, column_name='last_updated', is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False):
     if is_sqlserver_db:
         return f"UPDATE {table.get_queryname()} SET {column_name}=CURRENT_TIMESTAMP"
     else:
         raise NotSupported
 
-def insert_update_delete_trigger_query( table, trigger_name, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False ):
+def insert_update_delete_trigger_query( table, trigger_name, sequence_name, primary_key_columns, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, tracking_id_exists=True ):
+    primary_key_columns = [ f for f in table.column_set.filter(columnconstraint__is_primary_key=True) ]
+    primary_key_column_names = [ f.name for f in primary_key_columns ]
+
     if is_sqlserver_db:
         return f"""
         -- create trigger if not exists but last_updated column exists
-IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table.name}' AND TABLE_SCHEMA = '{table.schema.name}' AND COLUMN_NAME = 'last_updated')
-BEGIN
-	IF NOT EXISTS (SELECT * FROM sys.objects WHERE type = 'TR' AND name = '{trigger_name}')
-	BEGIN
-		DECLARE @SQL nvarchar(1000)
-		
-		SET @SQL = 'CREATE TRIGGER {trigger_name} ON {table.schema.name}.{table.name} ' 
-		+ ' FOR INSERT, UPDATE, DELETE AS BEGIN '
-		+ ' DECLARE @tn_b INT; '
-		+ ' SET @tn_b = TRIGGER_NESTLEVEL(( SELECT object_id FROM sys.triggers WHERE name = ''{trigger_name}'' )); '
-		+ ' IF (@tn_b <= 1) '
-		+ ' BEGIN '
-			+ ' IF EXISTS (SELECT 0 FROM inserted) '  -- insert or update
-			+ ' BEGIN '
-				+ 'IF EXISTS (SELECT ${PRIMARYKEYCOLUMN} FROM inserted) '
-				+ 'BEGIN '
-					+ ' UPDATE {table.schema.name}.{table.name} SET last_updated=CURRENT_TIMESTAMP WHERE ' -- set the value of the last_updated to now
-					+ ' ${PRIMARYKEYCOLUMN} IN (SELECT ${PRIMARYKEYCOLUMN} FROM inserted); '
-				+ 'END '
-			+ ' END '
-			+ ' ELSE ' -- deletion
-			+ ' BEGIN '
-					+ 'IF EXISTS (SELECT ${PRIMARYKEYCOLUMN} FROM DELETED) '
-					+ 'BEGIN '
-						+ ' DECLARE @table_id INT; '
-						+ ' SELECT @table_id = min(${PRIMARYKEYCOLUMN}) FROM deleted; '
-						+ ' WHILE @table_id IS NOT NULL '
-						+ ' BEGIN '
-							+ ' INSERT INTO {table.schema.name}_{table.name}_deletion (row_id, deletion_time) '
-							+ ' VALUES ( @table_id, CURRENT_TIMESTAMP );'
-							+ ' SELECT @table_id = min(${PRIMARYKEYCOLUMN}) FROM deleted WHERE ${PRIMARYKEYCOLUMN} > @table_id;'
-						+ ' END '
-					+ ' END '
-			+ ' END '
-		+ ' END END '
+            IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table.name}' AND TABLE_SCHEMA = '{table.schema.name}' AND COLUMN_NAME = 'last_updated')
+            BEGIN
+                IF NOT EXISTS (SELECT * FROM sys.objects WHERE type = 'TR' AND name = '{trigger_name}')
+                BEGIN
+                    DECLARE @SQL nvarchar(1000)
+                    
+                    SET @SQL = 'CREATE TRIGGER {trigger_name} ON {table.schema.name}.{table.name} ' 
+                    + ' FOR INSERT, UPDATE, DELETE AS BEGIN '
+                    + ' DECLARE @tn_b INT; '
+                    + ' SET @tn_b = TRIGGER_NESTLEVEL(( SELECT object_id FROM sys.triggers WHERE name = ''{trigger_name}'' )); '
+                    + ' IF (@tn_b <= 1) '
+                    + ' BEGIN '
+                        + ' IF EXISTS (SELECT 0 FROM inserted) '  -- insert or update
+                        + ' BEGIN '
+                            + 'IF EXISTS (SELECT DISTINCT { ', '.join( primary_key_column_names ) if not tracking_id_exists else 'tracking_id' } FROM inserted) AND EXISTS (SELECT 0 FROM deleted) '
+                            + 'BEGIN '
+                                + ' UPDATE {table.get_queryname()} SET last_updated=CURRENT_TIMESTAMP WHERE '
+                                + ' { ', '.join( primary_key_columns ) if not tracking_id_exists else 'tracking_id' } IN (SELECT DISTINCT { ', '.join( primary_key_column_names ) if not tracking_id_exists else 'tracking_id' } FROM inserted); '
+                            + 'END '
 
-		EXEC (@SQL)
-	END
-END
+                            + 'IF NOT EXISTS (SELECT 0 FROM deleted) '
+                            + 'BEGIN '
+                                + ' DECLARE @table_id TABLE ( {', '.join( [ f"{get_column_type_and_precision(column)}" for column in primary_key_columns ] )} );'
+                                + 'DECLARE @now_datetime DATETIME2;'
+                                + ' SET @now_datetime = CURRENT_TIMESTAMP;'
+                                + ' DECLARE @nextvalue INT;'
+                                + 'SET @nextvalue = next value for {sequence_name}; '
+
+                                + 'INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM inserted WHERE tracking_id IS NULL;'
+                                + ' WHILE SELECT 1 FROM @table_id '
+                                + ' BEGIN '
+                                    + ' UPDATE {table.get_queryname()} SET tracking_id = ''{SERVER_ID}'' +  FORMAT( @now_datetime, ''yyyyMMddHHmmss'' ) + '
+                                    + ' RIGHT ( ''00'' + CAST( @nextvalue AS varchar(2) ), 2 ), last_updated = @now_datetime;'
+
+                                    + ' DELETE FROM @table_id;'
+                                    + ' INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM {table.get_queryname()} WHERE tracking_id IS NULL;'
+                                    + ' SET @nextvalue = next value for { sequence_name }; '
+                                + ' END'
+
+                        + ' END '
+                        + ' ELSE ' -- deletion
+                        + ' BEGIN '
+                                + 'IF EXISTS (SELECT DISTINCT { ', '.join( primary_key_columns ) if not tracking_id_exists else 'tracking_id' } FROM DELETED) '
+                                + 'BEGIN '
+                                    + ' DECLARE @table_id { ' INT ' if not tracking_id_exists else ' VARCHAR(21) ' }; '
+                                    + ' SELECT @table_id = min({ ', '.join( primary_key_columns ) if not tracking_id_exists else 'tracking_id' }) FROM deleted; '
+                                    + ' WHILE @table_id IS NOT NULL '
+                                    + ' BEGIN '
+                                        + ' INSERT INTO {table.schema.name}_{table.name}_deletion (row_tracking_id, deletion_time) '
+                                        + ' VALUES ( @table_id, CURRENT_TIMESTAMP );'
+                                        + ' SELECT @table_id = min({ ', '.join( primary_key_columns ) if not tracking_id_exists else 'tracking_id' }) FROM deleted WHERE { ', '.join( primary_key_columns ) if not tracking_id_exists else 'tracking_id' } > @table_id;'
+                                    + ' END '
+                                + ' END '
+                        + ' END '
+                    + ' END END '
+
+                    EXEC (@SQL)
+                END
+            END
         """
     else:
         raise NotSupported
 
+def create_deletion_table_query( table, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False ):
+    if is_sqlserver_db:
+        return f"""CREATE TABLE {table.schema.name}_{table.name}_deletion (deletion_id INT IDENTITY PRIMARY KEY, deletion_time DATETIME2(6) DEFAULT CURRENT_TIMESTAMP, row_tracking_id VARCHAR( { len(SERVER_ID) + 16 } ))"""
+    if is_postgres_db:
+        return f"""CREATE TABLE {table.schema.name}_{table.name}_deletion (deletion_id SERIAL PRIMARY KEY, deletion_time DATETIME2(6) DEFAULT CURRENT_TIMESTAMP, row_tracking_id VARCHAR( { len(SERVER_ID) + 16 } ))"""
+
+def refresh_table( table ):
+    connection = get_dbms_booleans(table.schema.database)
+
+    if connection:
+        dbms_booleans = get_dbms_booleans(table.schema.database)
+        query = None
+
+        if dbms_booleans['is_sqlserver_db']:
+            query = f"""
+            SELECT C.COLUMN_NAME, C.DATA_TYPE, C.CHARACTER_MAXIMUM_LENGTH, C.DATETIME_PRECISION, C.NUMERIC_PRECISION, C.IS_NULLABLE, TC.CONSTRAINT_TYPE FROM INFORMATION_SCHEMA.TABLES T LEFT JOIN 
+            INFORMATION_SCHEMA.COLUMNS C ON C.TABLE_NAME = T.TABLE_NAME AND T.TABLE_SCHEMA = C.TABLE_SCHEMA 
+            LEFT JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE CU ON 
+            CU.COLUMN_NAME = C.COLUMN_NAME AND CU.TABLE_NAME = C.TABLE_NAME AND CU.TABLE_SCHEMA = C.TABLE_SCHEMA LEFT JOIN 
+            INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC ON TC.CONSTRAINT_NAME = CU.CONSTRAINT_NAME 
+            WHERE T.TABLE_TYPE = 'BASE TABLE' AND T.TABLE_NAME = {table.name} AND T.TABLE_SCHEMA = {table.schema.name} ORDER BY T.TABLE_SCHEMA, T.TABLE_NAME
+            """
+        
+        if query:
+            cursor = connection.cursor()
+            results = cursor.execute(query)
+            columns = [ column[0].lower() for column in cursor.description ]
+            
+            table_dictionary = {}
+
+            for row in results:
+                row_dictionary = dict( zip(columns, row) )
+                column_dictionary = table_dictionary.setdefault(
+                    row_dictionary['column_name', {}]
+                )
+
+                if not column_dictionary:
+                    column_dictionary = {
+                        'data_type': get_column_datatype(**dbms_booleans, data_type_string=row_dictionary['data_type']),
+                        'character_maximum_length': row_dictionary['character_maximum_length'],
+                        'datetime_precision': row_dictionary['datetime_precision'],
+                        'numeric_precision': row_dictionary['numeric_precision'],
+                        'constraint_type': set([row_dictionary['constraint_type']]),
+                        'is_nullable': row_dictionary['is_nullable'].lower() == 'yes'
+                    }
+                else:
+                    column_dictionary['constraint_type'].add( row_dictionary['constraint_type'] )
+
+            for column in table_dictionary.keys():
+                column_dictionary = table_dictionary[column]
+
+                try:
+                    column_record = ferdolt_models.Column.objects.get_or_create(table=table, name=column)[0]
+
+                    column_record.data_type = column_dictionary['data_type']
+                    column_record.datetime_precision = column_dictionary['datetime_precision']
+                    column_record.character_maximum_length = column_dictionary['character_maximum_length']
+                    column_record.numeric_precision = column_dictionary['numeric_precision']
+                    column_record.is_nullable = column_dictionary['is_nullable']
+                    column_record.save()
+
+                    column_record.columnconstraint_set.all().delete()
+
+                    for constraint in column_dictionary['constraint_type']:
+                        primary_key_regex = re.compile("primary key", re.I)
+                        foreign_key_regex = re.compile("foreign key", re.I)
+                        
+                        if constraint:
+                            if primary_key_regex.search(constraint):
+                                ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_primary_key=True)
+                            
+                            if foreign_key_regex.search(constraint):
+                                ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_foreign_key=True)
+
+                    get_table_foreign_key_references(table)
+                except Exception as e:
+                    logging.error(f"Error occured: {str(e)}")
+                    raise e
+
 def initialize_database( database_record ):
     try:
         get_database_details(database_record)
-        dbms_booleans = get_dbms_booleans
+        dbms_booleans = get_dbms_booleans(database_record)
+
+        default_schema = ferdolt_models.DatabaseSchema.objects.get_or_create(database=database_record, name=get_default_schema(**dbms_booleans))
         
         connection = get_database_connection(database_record)
         cursor = connection.cursor()
@@ -662,15 +809,29 @@ def initialize_database( database_record ):
                 if primary_key_columns.count() <= 1:
                     # create and populate tracking_id column only if there is a single or no primary key column
                     try:
-                        query = f"ALTER TABLE {table.get_queryname()} ADD tracking_id VARCHAR({len(server_id) + 14 + 2}) UNIQUE"
+                        logging.info(f"Adding the tracking_id column to the {table.get_queryname()} table in the {database_record.__str__()} database")
+                        query = f"ALTER TABLE {table.get_queryname()} ADD tracking_id VARCHAR({len(server_id) + 14 + 5})"
 
                         cursor.execute(query)
+                        breakpoint()
                         try:
-                            # create sequence
-                            cursor.execute( create_sequence_query(f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence") )
+                            logging.info(f"Creating the tracking_id sequence in the {database_record.__str__()} database")
 
-                            # set the tracking_id where it is null
-                            cursor.execute( set_tracking_id_where_null_query(table.name, table.schema.name, primary_key_columns.first().name, server_id, **dbms_booleans ) )
+                            # create sequence
+                            cursor.execute( create_sequence_query(f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence", **dbms_booleans) )
+
+                            logging.info(f"Setting the tracking_id where null in the {table.get_queryname()} in the {database_record.__str__()} database")
+
+                            query = set_tracking_id_where_null_query(table.name, table.schema.name, primary_key_columns.first().name, server_id=server_id, sequence_name=f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence", **dbms_booleans )
+
+                            try:
+                                # set the tracking_id where it is null
+                                cursor.execute( query )
+                            except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
+                                logging.error(f"Error setting tracking_id where null in the {table.get_queryname()} table in the {database_record.name.lower()} database")
+                                connection.rollback()
+                                breakpoint()
+                                raise e
 
                             tracking_id_exists = True
 
@@ -683,8 +844,64 @@ def initialize_database( database_record ):
                         logging.error(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database")
                         connection.rollback()
                         raise e
+                else:
+                    try:
+                        logging.info(f"Adding the tracking_id column to the {table.get_queryname()} table in the {database_record.__str__()} database")
+                        query = f"ALTER TABLE {table.get_queryname()} ADD tracking_id VARCHAR({len(server_id) + 14 + 2}) UNIQUE"
+
+                        cursor.execute(query)
+
+                        try:
+                            logging.info(f"Creating the tracking_id sequence in the {database_record.__str__()} database")
+
+                            cursor.execute( create_sequence_query(f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence") )
+
+                            try:
+                                logging.info(f"Setting the tracking_id where null in the {table.get_queryname()} in the {database_record.__str__()} database")
+
+                                cursor.execute( set_tracking_id_where_null_query_multiple_primary_keys(table, primary_key_columns, server_id, sequence_name=f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence", **dbms_booleans) )
+                        
+                            except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                                logging.error(f"Error setting the values of the tracking_id column in the {table.get_queryname()} table in the {database_record.name.lower()} database")
+                                connection.rollback()
+                        
+                        except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                            logging.error(f"Error creating the tracking_id sequence in the {database_record.name.lower()} database")
+                            connection.rollback()        
+
+                    except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                        logging.error(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database")
+                        connection.rollback()
+
+                try:
+                    cursor.execute( create_deletion_table_query(table, **dbms_booleans) )
+
+                    try:
+                        cursor.execute( insert_update_delete_trigger_query(table, f"{table.schema.name}_{table.name}_insert_update_delete_trigger", f"{table.schema.name}_{table.name}_tracking_id_sequence", primary_key_columns, **dbms_booleans) )
+
+                        # create deletion table
+                        # create a default schema if it does not exist
+                        deletion_table = ferdolt_models.Table.objects.create( name=f'{table.schema.name}_{table.name}_deletion', schema=default_schema )
+
+                        table.deletion_table = deletion_table
+                        table.save()
+
+                        refresh_table( deletion_table )
+
+                        connection.commit()
+                    
+                    except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
+                        logging.error(f"Error creating deletion table for {table.get_queryname()} table in the {database_record.name.lower()}")
+                        connection.rollback()
+                        raise e
+
+                except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
+                    logging.error(f"Error creating deletion table for {table.get_queryname()} table in the {database_record.name.lower()}")
+                    connection.rollback()
+                    raise e
 
             if not table.column_set.filter(name__iexact='last_updated').exists():
+                logging.info(f"Adding the last_updated column to the {table.get_queryname()} table in the {database_record.__str__()} database")
                 query = create_datetime_column_with_default_now_query(table, **dbms_booleans)
 
                 try:
