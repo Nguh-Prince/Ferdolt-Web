@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import datetime as dt
+import zipfile
 
 import pyodbc
 
@@ -317,53 +318,63 @@ class ExtractionSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError( _("No database exists with id %(id)s" % {'id': id}) )
 
             if database_records:
-                filename = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}.json" )
+                base_filename = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}" )
+
+                filename = base_filename + ".json"
+                zip_filename = base_filename + ".zip"
 
                 with open( filename, "a+" ) as file:
                     json_string = json.dumps( results, default=custom_converter )
                     token = f.encrypt( bytes(json_string, 'utf-8') )
 
                     file.write( token.decode('utf-8') )
+                
+                # zipping the json file
+                with zipfile.ZipFile(zip_filename, mode='a') as archive:
+                    archive.write(filename, os.path.basename(filename))
                     
-                    with open( filename ) as __:
-                        file = models.File.objects.create( file=File( __, name=os.path.basename( filename ) ), size=os.path.getsize(filename), is_deleted=False )
+                with open( zip_filename, "rb" ) as __:
+                    file = models.File.objects.create( 
+                        file=File( __, name=os.path.basename( zip_filename ) ), 
+                        size=os.path.getsize(zip_filename), is_deleted=False )
 
-                        extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
+                    extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
 
-                        # record source info (database, schema, table)
-                        for database in database_records:
-                            # create extraction source databases, source schemas and source tables
-                            source_database = models.ExtractionSourceDatabase.objects.create( database=database['database'], extraction=extraction )
+                    # record source info (database, schema, table)
+                    for database in database_records:
+                        # create extraction source databases, source schemas and source tables
+                        source_database = models.ExtractionSourceDatabase.objects.create( database=database['database'], extraction=extraction )
 
-                            for schema in database[self.ExtractionSourceDatabaseSerializer.schemas_key]:
-                                source_schema = models.ExtractionSourceDatabaseSchema.objects.create(extraction_database=source_database, schema=schema['schema'])
+                        for schema in database[self.ExtractionSourceDatabaseSerializer.schemas_key]:
+                            source_schema = models.ExtractionSourceDatabaseSchema.objects.create(extraction_database=source_database, schema=schema['schema'])
 
-                                for table in schema[self.ExtractionSourceDatabaseSerializer.schema_tables_key]:
-                                    models.ExtractionSourceTable.objects.create(extraction_database_schema=source_schema, table=table['table'])
+                            for table in schema[self.ExtractionSourceDatabaseSerializer.schema_tables_key]:
+                                models.ExtractionSourceTable.objects.create(extraction_database_schema=source_schema, table=table['table'])
 
-                        # record target databases
-                        if 'target_databases' in validated_data and validated_data['target_databases']:
-                            for database in validated_data['target_databases']:
-                                synchronized_flag = False
+                    # record target databases
+                    if 'target_databases' in validated_data and validated_data['target_databases']:
+                        for database in validated_data['target_databases']:
+                            synchronized_flag = False
 
-                                try:
-                                    connection = get_database_connection(database)
+                            try:
+                                connection = get_database_connection(database)
 
-                                    if connection:
-                                        synchronize_database(connection, database, results)
-                                        flag = True
-                                    else: 
-                                        flag = False
-
-                                except TypeError as e:
-                                    raise e
-                                except Exception as e:
-                                    logging.error(f"The {database.__str__()} database was not synchronized successfully")
+                                if connection:
+                                    synchronize_database(connection, database, results)
+                                    flag = True
+                                else: 
                                     flag = False
 
-                                models.ExtractionTargetDatabase.objects.create(extraction=extraction, database=database, is_applied=synchronized_flag)
+                            except TypeError as e:
+                                raise e
+                            except Exception as e:
+                                logging.error(f"The {database.__str__()} database was not synchronized successfully")
+                                flag = False
+
+                            models.ExtractionTargetDatabase.objects.create(extraction=extraction, database=database, is_applied=synchronized_flag)
 
                 os.unlink( filename )
+                os.unlink( zip_filename )
 
             return extraction
 

@@ -16,6 +16,25 @@
 <link href="{% static 'frontend/plugins/daterangepicker/daterangepicker.css' %}" rel="stylesheet" type="text/css" />
 {% endblock %}
 
+{% block message_active %}active{% endblock %}
+{% block messages %}
+    {% if database and not connection %}
+        <div class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <img src="..." class="rounded me-2" alt="">
+                <strong class="me-auto">Ferdolt</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"
+                onclick="toggleMessages()"
+                ></button>
+            </div>
+        
+            <div class="toast-body">
+                We are unable to connect to the {{ database.name }} database, please ensure that your database server is running and your credentials are correct
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}
+
 {% block page_content %}
 <div class="container-fluid">
     {% if not database %}
@@ -40,8 +59,19 @@
     {% else %}
     <div class="row">
         <div class="col-sm-12">
-            <div class="page-title-box">
-                <div class="row justify-content-end">
+            <div class="page-title-box row">
+                <div class="col-md-6 row">
+                    {% if pending_synchronizations %}
+                        <div class="d-flex flex-column align-items-center">
+                            <div class="text-orange py-2">The {{ database.name }} database has {{ pending_synchronizations.count }} synchronizations pending</div>
+                            <button class="btn btn-outline-orange" onclick="synchronizeDatabase()">
+                                {% trans "Apply synchronizations" %}
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="row col-md-6 justify-content-end">
                     <div class="col-auto align-self-center d-none" id="action-buttons-container">
                         <button class="btn btn-outline-orange btn-sm mx-2" id="delete-many"
                             data-bs-target="#extract-from-database" data-bs-toggle="modal">
@@ -318,8 +348,8 @@
         $(card).find('.card-subtitle').text(`${databaseObject['version']['dbms_object']['name']} ${databaseObject['version']['version_number']}`)
         $('.card')
 
-        $(card).find('.database-host').text(`Host: ${databaseObject['host']}`)
-        $(card).find('.database-port').text(`Port: ${databaseObject['port']}`)
+        $(card).find('.database-host').text(`Host: ${databaseObject['clear_host']}`)
+        $(card).find('.database-port').text(`Port: ${databaseObject['clear_port']}`)
 
         $(card).find('.database-detail-link').text("Details")
         $(containerSelector).append(card)
@@ -498,6 +528,35 @@
                     case 400:
                         console.log(data.responseJSON)
                         break;
+                }
+            }
+        })
+    }
+
+    function synchronizeDatabase() {
+        $.ajax({
+            type: "POST",
+            url: `http://${location.host}${API_URL}/ferdolt/databases/${DATABASE_ID}/synchronize/`,
+            headers: {
+                "X-CSRFTOKEN": getCookie("csrftoken")
+            },
+            success: function(data) {
+                displayMessage( data['message'], ["alert", "alert-dismissible", "alert-success"] )
+            },
+            error: function(data) {
+                if ([400, 404, 403, 401].includes(data.status)) {
+                    switch(data.status) {
+                        case 400:
+                            displayMessage("Invalid request data " + data.responseJSON)
+                            break;
+                        case 403:
+                            displayMessage("You are not authorized to access this resource")
+                            break;
+                        case 404:
+                            displayMessage("The resource you are trying to access does not exist")
+                    }
+                } else if (data.status == 500) {
+                    displayMessage("A server error occured")
                 }
             }
         })

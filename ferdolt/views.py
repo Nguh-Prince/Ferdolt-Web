@@ -1,3 +1,4 @@
+import json
 import re
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -10,12 +11,18 @@ import logging
 import psycopg
 import pyodbc
 
+from cryptography import fernet
+
 from django.db.models import Q
 from django.utils.translation import gettext as _
 from django.utils import timezone
 
 from common.viewsets import MultipleSerializerViewSet
-from core.functions import get_database_connection, get_database_details, get_dbms_booleans
+from core.functions import get_database_connection, get_database_details, get_dbms_booleans, initialize_database, synchronize_database
+from ferdolt_web.settings import FERNET_KEY
+
+from flux import models as flux_models
+from flux.serializers import ExtractionSerializer
 
 from . import serializers
 from . import  permissions
@@ -73,6 +80,111 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
             logging.error(f"Error connecting to the {database.__str__()}.")
 
         return super().create(request, *args, **kwargs)
+
+    @action(
+        methods=["POST"], detail=True
+    )
+    def initialize(self, request, *args, **kwargs):
+        db = self.get_object()
+
+        initialize_database(db)
+
+    @action(
+        methods=["POST"], detail=True
+    )
+    def synchronize(self, request, *args, **kwargs):
+        f = fernet.Fernet(FERNET_KEY)
+        database = self.get_object()
+
+        pending_synchronizations = flux_models.ExtractionTargetDatabase.objects.filter(database=database, is_applied=False).order_by('extraction__time_made')
+
+        if not pending_synchronizations.exists():
+            return Response(data={'message': _("The %(database_name)s database does not have any pending synchronization" % {'database_name': database.name})})
+
+        connection = get_database_connection(database)
+
+        synchronizations_applied = []
+        unapplied_synchronizations = []
+
+        if connection:
+            for synchronization in pending_synchronizations:
+                file_path = synchronization.extraction.file.file.path
+                file = synchronization.extraction.file
+
+                try:
+                    with open( file_path ) as __:
+                        content = __.read()
+
+                        if len(content) > 0:
+                            content = f.decrypt( content.encode('utf-8') )
+                            content = content.decode('utf-8')
+
+                            logging.debug("['In ferdolt.views.DatabaseViewSet.synchronize'] reading the unapplied synchronization")
+
+                            try:
+                                dictionary: dict = json.loads(content)
+                                
+                                synchronize_database(connection, database, dictionary)
+                                time_applied = timezone.now()
+                                synchronization.time_applied = time_applied
+                                synchronization.is_applied = True
+
+                                synchronization.save()
+                                
+                                synchronizations_applied.append(synchronization.extraction)
+
+                            except json.JSONDecodeError as e:
+                                logging.error( f"[In ferdolt.views.SynchronizationViewSet.synchronize]. Error parsing json from file for database synchronization. File path: {file_path}" )
+                                unapplied_synchronizations.append({
+                                    "synchronization": ExtractionSerializer(synchronization.extraction),
+                                    "error": _("Couldn't decode json file")
+                                })
+                        else:
+                            time_applied = timezone.now()
+                            
+                            synchronization.time_applied = time_applied
+                            synchronization.is_applied = True
+                            synchronization.save()
+
+                            synchronizations_applied.append(synchronization.extraction)
+
+                except FileNotFoundError as e:
+                    logging.error(f"['In ferdolt.views.DatabaseViewSet.synchronize'] couldn't read extraction file {file_path} because it does not exist")
+                    unapplied_synchronizations.append({
+                        "synchronization": ExtractionSerializer(synchronization.extraction),
+                        "error": _("The extraction file has been renamed, moved or deleted")
+                    })
+
+                except fernet.InvalidToken as e:
+                    logging.error(f"['In ferdolt.views.DatabaseViewSet.synchronize'] couldn't decode extraction file {file_path}")
+                    unapplied_synchronizations.append({
+                        "synchronization": ExtractionSerializer(synchronization.extraction).data,
+                        "error": _("Couldn't decrypt the extraction file")
+                    })
+
+        else:
+            return Response(data={'message': _("Error connecting to the %(database_name)s database. Please ensure that your server is running and your credentials are correct" 
+                % {'database_name': database.name})}, 
+            status=status.HTTP_400_BAD_REQUEST)
+
+        return Response( data={
+            'message': _("%(number_applied)d synchronizations applied. %(number_error)d synchronizations unapplied" 
+                % {'number_applied': len(synchronizations_applied), 'number_error': len(unapplied_synchronizations)}),
+            'data': {
+                'applied_synchronizations': ExtractionSerializer(synchronizations_applied, many=True).data,
+                'unapplied_synchronizations': unapplied_synchronizations
+            }
+        } )
+
+    @action(
+        methods=["GET"], detail=True
+    )
+    def extractions(self, request, *args, **kwargs):
+        database = self.get_object()
+
+        extractions = flux_models.Extraction.objects.filter(extractionsourcedatabase__database=database)
+
+        return Response( data=ExtractionSerializer(extractions, many=True).data )
 
 class DatabaseSchemaViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.DatabaseSchemaSerializer

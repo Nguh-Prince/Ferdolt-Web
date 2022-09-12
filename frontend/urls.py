@@ -10,6 +10,7 @@ urlpatterns = [
     path("databases/<int:id>", views.databases, name="database-detail"),
     path("extractions/", views.extractions, name="extractions"),
     path("schemas/", views.schemas, name="schemas"),
+    path('groups/', views.groups, name='groups'),
     path("tables/", views.tables, name="tables"),
     path("tables/<int:id>/", views.tables, name="tables"),
     path("columns/", views.columns, name="columns"),

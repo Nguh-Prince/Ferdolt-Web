@@ -98,7 +98,7 @@ class Table(models.Model):
     name = models.CharField(max_length=100)
     level = models.IntegerField(default=0) # this level is the order in which items should be added to tables to avoid integrity errors 
     # starts with 0 (these are the parent tables with no external foreign keys)
-    deletion_table = models.OneToOneField('self', on_delete=models.SET_NULL, null=True)
+    deletion_table = models.OneToOneField('self', on_delete=models.SET_NULL, null=True, related_name='deletion_target')
 
     class Meta:
         verbose_name = _("Table")

@@ -1,0 +1,423 @@
+{% extends 'frontend/base-template.html' %}
+{% load i18n static %}
+
+{% block title %}Ferdolt | Groups{% endblock %}
+
+{% block page_content %}
+<div class="row">
+    <div class="col-sm-12">
+        <div class="page-title-box">
+            <div class="row justify-content-end">
+                <div class="col-auto align-self-center">
+                    <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                        data-bs-target="#new-group-modal">
+                        <i class="fas fa-plus me-2"></i>{% trans "Add database" %}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block modals %}
+<div class="modal" id="new-group-modal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "New Database" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label" for="new-group-name-input">{% trans "Name" %}</label>
+                    <input type="text" id="new-group-name-input" class="form-control">
+                </div>
+
+                <div class="mb-3">
+                    <div class="accordion" id="new-group-accordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="new-group-table-heading">
+                                <button class="accordion-button"
+                                data-bs-target="#new-group-table-accordion-body" aria-expanded="true" aria-controls="new-group-table-accordion-body">
+                                    Tables
+                                </button>
+                            </h2>
+
+                            <div class="accordion-collapse collapse show" id="new-group-table-accordion-body" aria-labelledby="new-group-table-heading">
+                                <div class="accordion-body">
+                                    <div class="accordion py-2" id="new-group-tables-accordion">
+                                        
+                                    </div>
+
+                                    <div class="row justify-content-end">
+                                        <button style="width: 80px;" class="btn btn-outline-secondary" 
+                                        data-bs-target="#new-grouptable-modal" 
+                                        data-bs-toggle="modal">{% trans "Add table" %}</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submit-new-database-form" onclick="submitNewGroup()">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="new-grouptable-modal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "New Table" %}</div>
+                <button type="button" class="btn-close" data-bs-target="#new-group-modal" data-bs-toggle="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label" for="new-grouptable-name-input">{% trans "Table name" %}</label>
+                    <input type="text" id="new-grouptable-name-input" class="form-control" value="Table">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">{% trans 'Columns' %}</label>
+
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>{% trans "Name" %}</th>
+                                <th>{% trans "Data type" %}</th>
+                                <th>{% trans "Nullable?" %}</th>
+                                <th>{% trans "Primary key?" %}</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            <tr id="default-row">
+                                <td></td>
+                                <td>
+                                    <input type="text" value="Column" class="form-control" id="default-row_name_input">
+                                </td>
+                                <td>
+                                    <select class="form-control" id="default-row_data_type_input">
+                                        <option value="">Numeric</option>
+                                        <option value="">Character</option>
+                                        <option value="">Date</option>
+                                        <option value="">Datetime</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select class="form-control" id="default-row_nullable_input">
+                                        <option value="">{% trans "Yes" %}</option>
+                                        <option value="">{% trans "No" %}</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select class="form-control" id="default-row_primary_key_input">
+                                        <option value="">{% trans "Yes" %}</option>
+                                        <option value="">{% trans "No" %}</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="row justify-content-end">
+                        <button style="width: 120px;" class="btn btn-outline-secondary" 
+                            onclick="addColumnsToNewTable()">{% trans "Add column" %}</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" data-bs-target="#new-group-modal" data-bs-toggle="modal"
+                 onclick="addTableToDraft()">{% trans "Done" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    var DRAFT = {
+        name: '',
+        databases: [],
+        tables: []
+    }
+
+    $(".accordion-button").click(function() {
+        console.log("Clicked accordion-button")
+        let targetSelector = $(this).attr('data-bs-target')
+        console.log(`The target is: ${targetSelector}`)
+
+        if (targetSelector) {
+            $(targetSelector).toggleClass('show')
+        }
+    })
+
+    $("#new-group-name-input").change(function() {
+        let value = $(this).val()
+
+        DRAFT.name = value
+    })
+
+    function addColumnsToNewTable(count=1) {
+        console.log("The number of columns to add is")
+        console.log(count)
+
+        for (let i=0; i<count; i++) {
+            console.log(`Inserting row ${i+1}`)
+            let rowId = generateRandomId()
+            let row = createElement('tr', [], {id: rowId})
+
+            let deleteCell = createElement('td', [])
+            let deleteIcon = createElement('i', ['bg-error', 'text-danger'], {'data-feather': 'trash'})
+            $(deleteCell).append(deleteIcon)
+            $(row).append(deleteCell)
+
+            deleteCell.onclick = function() {
+                $(this).parent().remove()
+            }
+
+            // name input
+            let nameCell = createElement('td', [])
+            let nameInput = createElement('input', ['form-control'], {id: `${rowId}_name_input`})
+            $(nameCell).append(nameInput)
+            $(row).append(nameCell)
+
+            // data type input
+            let dataTypeCell = createElement('td', [])
+            let dataTypeSelect = createElement('select', ['form-control'], {id: `${rowId}_data_type_input`})
+            let dataTypes = {
+                'number': "Numeric",
+                "character": "Character",
+                "date": "Date",
+                "datetime": "Datetime"
+            }
+            
+            for ( let dataType of Object.keys(dataTypes) ) {
+                let option = createElement('option', [], {
+                    value: dataType
+                })
+                option.textContent = dataTypes[dataType];
+                
+                $(dataTypeSelect).append(option)
+            }
+            $(dataTypeCell).append(dataTypeSelect)
+            $(row).append(dataTypeCell)
+
+            let nullableCell = createElement('td', [])
+            let nullableSelect = createElement('select', ['form-control'], {id: `${rowId}_nullable_input`})
+
+            let nullableOptions = {
+                'true': "Yes",
+                'false': "No"
+            }
+
+            for (let nullableOption of Object.keys(nullableOptions)) {
+                let option = createElement('option', [], {value: nullableOption})
+                option.textContent = nullableOptions[nullableOption]
+
+                $(nullableSelect).append(option)
+            }
+            
+            $(nullableCell).append(nullableSelect)
+            $(row).append(nullableCell)
+
+            $(nullableCell).append(nullableSelect)
+            $(row).append(nullableCell)
+
+            let primaryKeyCell = createElement('td', [])
+            let primaryKeySelect = createElement('select', ['form-control'], {id: `${rowId}_primary_key_input`})
+
+            let primaryKeyOptions = {
+                'true': "Yes",
+                'false': "No"
+            }
+
+            for (let primaryKeyOption of Object.keys(primaryKeyOptions)) {
+                let option = createElement('option', [], {
+                    value: primaryKeyOption
+                })
+                option.textContent = primaryKeyOptions[primaryKeyOption];
+                
+                $(primaryKeySelect).append(option)
+            }
+            $(primaryKeyCell).append(primaryKeySelect)
+            $(row).append(primaryKeyCell)
+            
+            $('#new-grouptable-modal .modal-body table tbody').append(row)
+        }
+    
+        feather.replace()
+    }
+
+    function addTableToDraft() {
+        let tableName = $("#new-grouptable-name-input").val()
+        let columns = []
+
+        $('#new-grouptable-modal .modal-body table tbody tr').each( (index, row) => {
+            let rowId = $(row).attr('id')
+
+            let name = $(`#${rowId}_name_input`).val()
+            let data_type = $(`#${rowId}_data_type_input`).val()
+            let nullable = $(`#${rowId}_nullable_input`).val()
+            let primary_key = $(`#${rowId}_primary_key_input`).val()
+
+            let columnObject = {
+                name: name,
+                is_required: nullable === 'true',
+                data_type: data_type
+            }
+
+            if (primary_key === 'true') {
+                columnObject['constraints'] = {
+                    'is_primary_key': true
+                }
+            }
+
+            columns.push(columnObject)
+        } )
+        
+        DRAFT.tables.push(
+            {
+                name: tableName,
+                columns: columns
+            }
+        )
+
+        displayDraft()
+    }
+
+    function displayDraft() {
+        $("#new-group-name-input").val(DRAFT.name)
+
+        for (let table of DRAFT.tables) {
+            let id = generateRandomId()
+            let accordionHeaderId = `${id}_header`;
+            let accordionBodyId = `${id}_body`;
+
+            let tableAccordionItem = createElement('div', ['accordion-item'])
+            $("#new-group-tables-accordion").append(tableAccordionItem)
+
+            let tableAccordionHeader = createElement('h2', ['accordion-header'], 
+                {id: accordionHeaderId}
+            )
+            $(tableAccordionItem).append(tableAccordionHeader)
+            
+            let tableAccordionButton = createElement('button', ['accordion-button'], {
+                'data-bs-target': `#${accordionBodyId}`, 'aria-expanded': false, 
+                'aria-controls': accordionBodyId, textContent: table.name
+            })
+            $(tableAccordionHeader).append(tableAccordionButton)
+
+            let tableAccordionBody = createElement('div', ['acordion-collapse', 'collapse', 'show'], 
+                {id: accordionBodyId, 'aria-labelledby': accordionHeaderId}
+            )
+            $(tableAccordionItem).append(tableAccordionBody)
+
+            let tableAccordion = createElement('div', ['accordion-body'])
+            $(tableAccordionBody).append(tableAccordion)
+
+            let tableColumnTable = createElement('table', ['table', 'table-striped']) 
+            $(tableAccordion).append(tableColumnTable)
+
+            let tableColumnTableHead = createElementsRecursively({
+                tag: 'thead',
+                classes: [],
+                elements: [
+                    {
+                        tag: 'tr',
+                        classes: [],
+                        elements: [
+                            {
+                                tag: 'th',
+                                classes: [],
+                                attributes: {textContent: "Name"}
+                            },
+                            {
+                                tag: 'th',
+                                classes: [],
+                                attributes: {textContent: "Data type"}
+                            },
+                            {
+                                tag: 'th',
+                                classes: [],
+                                attributes: {textContent: "Nullable?"}
+                            },
+                            {
+                                tag: 'th',
+                                classes: [],
+                                attributes: {textContent: "Primary key"}
+                            }
+                        ]
+                    }
+                ]
+            })
+
+            $(tableColumnTable).append(tableColumnTableHead)
+
+            let tableColumnTableBody = createElement('tbody', [], {});
+            $(tableColumnTable).append(tableColumnTableBody);
+
+            for (let column of table.columns) {
+                let row = createElementsRecursively({
+                    tag: 'tr',
+                    classes: [],
+                    elements: [
+                        {
+                            tag: 'td',
+                            classes: [],
+                            attributes: {textContent: column.name}
+                        },
+                        {
+                            tag: 'td',
+                            classes: [],
+                            attributes: {textContent: column.data_type}
+                        }
+                        ,
+                        {
+                            tag: 'td',
+                            classes: [],
+                            attributes: {textContent: column.is_required ? "No": "Yes"}
+                        },
+                        {
+                            tag: 'td',
+                            classes: [],
+                            attributes: {textContent: column.constraints && column.constraints.is_primary_key ? "Yes": "No"}
+                        }
+                    ]
+                })
+
+                $(tableColumnTableBody).append(row)
+            }
+        }
+    }
+
+    function submitNewGroup() {
+        $.ajax({
+            type: "POST",
+            url: `http://${location.host}${API_URL}/ferdolt/groups/`,
+            headers: {
+                'X-CSRFTOKEN': getCookie("csrftoken")
+            },
+            data: JSON.stringify(DRAFT),
+            contentType: 'application/json',
+            success: function(data) {
+                displayMessage("Group has been created successfully", ['alert', 'alert-success', 'alert-dismissible'])
+            },
+            error: function(data) {
+                console.log(data.responseJSON)
+                console.log(data.responseText)
+            }
+        })
+    }
+</script>
+{% endblock %}

@@ -15,7 +15,13 @@ function createElement(htmlTag, classes = null, attributes = null) {
 
     if (attributes && typeof attributes === 'object') {
         for (let key in attributes) {
-            node.setAttribute(key, attributes[key])
+            if (key.toLowerCase() !== 'textcontent') {
+                node.setAttribute(key, attributes[key])
+            }
+            else{
+                let textNode = document.createTextNode(attributes[key])
+                node.appendChild(textNode)
+            }
         }
     }
 
@@ -37,6 +43,14 @@ function createElementFromObject(object) {
     // classes attribute (a list consisting of the different css class strings to be applied to the class)
     // and an attributes object (which has the different attributes alongside their values e.g {'id': 'new-div'})
     let element = createElement(object.tag, object.classes, object.attributes)
+
+    try {
+        if ( Object.keys(object.attributes).includes('textContent') ) {
+            element.textContent = textContent
+        }   
+    } catch (error) {
+        
+    }
     return element
 }
 

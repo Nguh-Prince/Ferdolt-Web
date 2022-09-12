@@ -23,7 +23,25 @@ class File(models.Model):
         except FileNotFoundError as e:
             logging.error(f"Couldn't set hash for {file_path} because the file was not found")
         
-        super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)
+
+    def get_file_hash(self, *args, **kwargs):
+        file_path = self.file.path
+
+        with open( file_path ) as __:
+            content = __.read()
+            return sha256( content.encode('utf-8') ).hexdigest()
+        
+        return None
+
+    @property
+    def file_was_modified(self, *args, **kwargs):
+        return self.hash == self.get_file_hash()
+
+    
+    @property
+    def file_exists(self, *args, **kwargs):
+        return os.path.exists(self.file.path)
 
 class Extraction(models.Model):
     time_made = models.DateTimeField()

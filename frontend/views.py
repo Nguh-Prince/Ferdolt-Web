@@ -14,6 +14,7 @@ from reportlab.pdfgen import canvas
 
 from ferdolt import models as ferdolt_models
 from flux import models as flux_models
+from groups import models as groups_models
 
 from core.functions import get_column_datatype, get_database_connection, sql_server_regex, postgresql_regex
 
@@ -139,17 +140,28 @@ def databases(request, id: int=None):
     database = None
     databases = ferdolt_models.Database.objects.all()
 
+    context = {'database': database, 
+    'databases': databases}
+
     if id:
-        query = ferdolt_models.Database.objects.filter(id=id)
+        query = databases.filter(id=id)
         if not query.exists():
             return redirect("frontend:not_found")
         else:
             # try to connect to the database
             database: ferdolt_models.Database = query.first()
+            pending_synchronizations = flux_models.ExtractionTargetDatabase.objects.filter(
+                database=database, is_applied=False
+            )
+            connection = get_database_connection(database)
+
+            context['database'] = database
+            context['pending_synchronizations'] = pending_synchronizations
+            context['connection'] = connection
+
             databases = databases.filter( dbms_version=database.dbms_version )
 
-    return render(request, "frontend/databases.html", context={'database': database, 
-    'databases': databases})
+    return render(request, "frontend/databases.html", context=context)
 
 def not_found(request):
     return render(request, "frontend/auth-404.html")
@@ -195,6 +207,9 @@ def servers(request, id: int=None):
         server = query.first()
 
         return render(request, "frontend/servers.html", context={'server': server})
+
+def groups(request, id: int=None):
+    return render(request, "frontend/groups.html", context={'groups': groups_models.Group.objects.all()})
 
 def extractions(request):
     return render(request, "frontend/extractions.html", context={'extractions': flux_models.Extraction.objects.all(), 'databases': ferdolt_models.Database.objects.all()})
