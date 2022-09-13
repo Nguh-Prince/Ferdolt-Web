@@ -15,13 +15,15 @@ import pyodbc
 
 import psycopg
 
-from rest_framework import viewsets
+from rest_framework import permissions as drf_permissions
 from rest_framework import status
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from common.permissions import IsStaff
 
 from common.viewsets import MultipleSerializerViewSet
-from core.functions import custom_converter, get_create_temporary_table_query, get_database_connection, get_dbms_booleans, get_temporary_table_name
+from core.functions import custom_converter, get_create_temporary_table_query, get_database_connection, get_dbms_booleans, get_temporary_table_name, synchronize_database
 from ferdolt_web import settings
 
 from ferdolt_web.settings import FERNET_KEY
@@ -36,6 +38,7 @@ deletion_table_regex = re.compile("_deletion$")
 
 class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     serializer_class = serializers.GroupSerializer
+    permission_classes = [ IsStaff, ]
 
     serializer_classes = {
         'create': serializers.GroupCreationSerializer,
@@ -60,7 +63,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         source = serializer.validated_data['source_database']
 
         validated_data = serializer.validated_data
-        f = Fernet(FERNET_KEY)
+        f = Fernet(group.get_fernet_key())
 
         if 'use_pentaho' not in validated_data or not validated_data['use_pentaho']:
             databases = [source]
@@ -69,8 +72,17 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
             use_time = not ( 'use_time' in validated_data and not validated_data['use_time'] )
 
-            if 'start_time' in validated_data and use_time:
-                start_time = validated_data.pop('start_time')
+            if use_time:
+                if 'start_time' in validated_data:
+                    start_time = validated_data.pop('start_time')
+                else:
+                    # get the creation time of the latest extraction
+                    latest_extraction_query = models.GroupExtraction.objects.order_by('-extraction__time_made')
+
+                    if latest_extraction_query.exists():
+                        start_time = latest_extraction_query.first().time_made
+                    else: 
+                        start_time = None
 
             time_made = timezone.now()
 
@@ -98,21 +110,16 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                     cursor = connection.cursor()
 
                     for table in group.tables.all():
-                        # get the groupcolumns linked to the columns of tables in the source database
-                        
-                        actual_database_tables = ferdolt_models.Table.objects.filter(
-                            schema__database=source.database, id__in=models.GroupColumnColumn.objects
-                                .filter(group_column__group_table=table)
-                                .values("column__table__id")
-                            ).distinct()
-
-                        actual_database_tables = ferdolt_models.Table.objects.filter( id__in=table.grouptabletable_set.values("table__id") )
+                        # get the tables of this database linked to the group's tables
+                        actual_database_tables = ferdolt_models.Table.objects.filter( id__in=table.grouptabletable_set.values("table__id"), 
+                            schema__database=source.database 
+                        )
                         
                         table_dictionary = {}
-                        breakpoint()
 
                         for item in actual_database_tables:
                             table_results = []
+
                             table_query_name = item.get_queryname()
                             
                             # get the group columns of the grouptable linked to this item's table
@@ -141,14 +148,32 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                 if table_results:
                                     table_dictionary.setdefault( "rows", table_results )
 
-                            except pyodbc.ProgrammingError as e:
+                            except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                 logging.error(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
                                 raise e
-                            except psycopg.ProgrammingError as e:
-                                logging.error(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
-                                raise e
+
+                            deletion_table = table.deletion_table
+                            if deletion_table:
+                                table_deletions = []
+                                time_field = 'deletion_time'
+
+                                query = f"""
+                                SELECT { ', '.join( [ column.name for column in deletion_table.column_set.all() ] ) } 
+                                FROM { deletion_table.get_queryname() } {f"WHERE {time_field} >= ?" if start_time and time_field.exists() and use_time else ""}
+                                """
+
+                                rows = cursor.execute( query, start_time ) if start_time and time_field and use_time else cursor.execute(query)
+
+                                columns = [ column[0] for column in cursor.description ]
+
+                                for row in rows:
+                                    row_dictionary = dict( zip( columns, row ) )
+                                    table_deletions.append( row_dictionary )
+
+                                if table_results:
+                                    table_dictionary.setdefault( "deleted_rows", table_deletions )
+
                         
-                        breakpoint()
                         if table_dictionary.keys():
                             group_dictionary.setdefault( table.name.lower(), table_dictionary )
                             
@@ -156,7 +181,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                             "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}.json")
 
                             group_extraction = None
-                            breakpoint()
+
                             with open( file_name, "a+" ) as __:
                                 json_string = json.dumps( results, default=custom_converter )
                                 token = f.encrypt( bytes( json_string, 'utf-8' ) )
@@ -171,9 +196,12 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                 group_extraction = models.GroupExtraction.objects.create(group=group, extraction=extraction, source_database=source)
 
                                 for database in target_databases:
-                                    models.GroupDatabaseSynchronization.objects.create(extraction=group_extraction, 
-                                        group_database=database, is_applied=False
-                                    )
+                                    connection = get_database_connection(database)
+
+                                    if connection:
+                                        models.GroupDatabaseSynchronization.objects.create(extraction=group_extraction, 
+                                            group_database=database, is_applied=False
+                                        )
 
                             os.unlink( file_name )
                             

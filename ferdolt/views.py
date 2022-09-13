@@ -1,10 +1,12 @@
 import json
 import re
+import zipfile
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
-from core.exceptions import InvalidDatabaseConnectionParameters
+from common.permissions import IsStaff
+from core.exceptions import InvalidDatabaseConnectionParameters, InvalidDatabaseStructure
 from rest_framework import serializers as drf_serializers
 
 import logging
@@ -30,6 +32,7 @@ from . import  permissions
 from . import models
 
 class DatabaseManagementSystemViewSet(viewsets.ModelViewSet):
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.DatabaseManagementSystemSerializer
 
     def get_queryset(self):
@@ -37,6 +40,7 @@ class DatabaseManagementSystemViewSet(viewsets.ModelViewSet):
 
 
 class DatabaseManagementSystemVersionViewSet(viewsets.ModelViewSet):
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.DatabaseManagementSystemVersionSerializer
 
 
@@ -45,6 +49,7 @@ class DatabaseManagementSystemVersionViewSet(viewsets.ModelViewSet):
 
 
 class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.DatabaseSerializer
 
     serializer_classes = {
@@ -87,8 +92,15 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     def initialize(self, request, *args, **kwargs):
         db = self.get_object()
 
-        initialize_database(db)
+        try:
+            initialize_database(db)
+        except InvalidDatabaseStructure as e:
+            logging.error(f"InvalidDatabaseStructure error raised when initializeing {db.__str__()}")
+            return Response(data={'message': _("The target database has one or more target tables without primary key fields. Please add them and try again")}, status=status.HTTP_400_BAD_REQUEST)
+        except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
+            return Response( data={'message': _("An error occured when trying to initialize the %(database)s database" % {'database': db.__str__()})} )
 
+        return Response(data={'message': _("The %(database)s was initialized successfully." % {'database': db.__str__()})})
     @action(
         methods=["POST"], detail=True
     )
@@ -105,6 +117,8 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
         synchronizations_applied = []
         unapplied_synchronizations = []
+        
+        temporary_tables_created = set([])
 
         if connection:
             for synchronization in pending_synchronizations:
@@ -112,42 +126,51 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                 file = synchronization.extraction.file
 
                 try:
-                    with open( file_path ) as __:
-                        content = __.read()
+                    with zipfile.ZipFile(file_path) as zip_file:
+                        for file in zip_file.namelist():
+                            if file.endswith('.json'):
+                                content = zip_file.read(file)
+                                if len(content) > 0:
+                                    content = f.decrypt( content.encode('utf-8') if not isinstance(content, bytes) else content ) 
+                                    content = content.decode('utf-8')
 
-                        if len(content) > 0:
-                            content = f.decrypt( content.encode('utf-8') )
-                            content = content.decode('utf-8')
+                                    logging.debug("['In ferdolt.views.DatabaseViewSet.synchronize'] reading the unapplied synchronization")
 
-                            logging.debug("['In ferdolt.views.DatabaseViewSet.synchronize'] reading the unapplied synchronization")
+                                    try:
+                                        dictionary: dict = json.loads(content)
+                                        try:
+                                            synchronize_database(connection, database, dictionary, 
+                                            temporary_tables_created=temporary_tables_created)
+                                            time_applied = timezone.now()
+                                            synchronization.time_applied = time_applied
+                                            synchronization.is_applied = True
 
-                            try:
-                                dictionary: dict = json.loads(content)
-                                
-                                synchronize_database(connection, database, dictionary)
-                                time_applied = timezone.now()
-                                synchronization.time_applied = time_applied
-                                synchronization.is_applied = True
+                                            synchronization.save()
+                                            
+                                            synchronizations_applied.append(synchronization.extraction)
+                                        except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
+                                            logging.error(f"[In ferdolt.views.SynchronizationViewSet.synchronize]. Error synchronizing the database, error: {str(e)}")
+                                            unapplied_synchronizations.append({
+                                                'synchronization': ExtractionSerializer(synchronization.extraction).data,
+                                                "error": _("Couldn't apply the synchronization due to a server error")
+                                            })
 
-                                synchronization.save()
-                                
-                                synchronizations_applied.append(synchronization.extraction)
+                                    except json.JSONDecodeError as e:
+                                        logging.error( f"[In ferdolt.views.SynchronizationViewSet.synchronize]. Error parsing json from file for database synchronization. File path: {file_path}" )
+                                        unapplied_synchronizations.append({
+                                            "synchronization": ExtractionSerializer(synchronization.extraction),
+                                            "error": _("Couldn't decode json file")
+                                        })
+                                else:
+                                    time_applied = timezone.now()
+                                    
+                                    synchronization.time_applied = time_applied
+                                    synchronization.is_applied = True
+                                    synchronization.save()
 
-                            except json.JSONDecodeError as e:
-                                logging.error( f"[In ferdolt.views.SynchronizationViewSet.synchronize]. Error parsing json from file for database synchronization. File path: {file_path}" )
-                                unapplied_synchronizations.append({
-                                    "synchronization": ExtractionSerializer(synchronization.extraction),
-                                    "error": _("Couldn't decode json file")
-                                })
-                        else:
-                            time_applied = timezone.now()
-                            
-                            synchronization.time_applied = time_applied
-                            synchronization.is_applied = True
-                            synchronization.save()
+                                    synchronizations_applied.append(synchronization.extraction)
 
-                            synchronizations_applied.append(synchronization.extraction)
-
+                    connection.close()
                 except FileNotFoundError as e:
                     logging.error(f"['In ferdolt.views.DatabaseViewSet.synchronize'] couldn't read extraction file {file_path} because it does not exist")
                     unapplied_synchronizations.append({
@@ -187,12 +210,14 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         return Response( data=ExtractionSerializer(extractions, many=True).data )
 
 class DatabaseSchemaViewSet(viewsets.ModelViewSet):
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.DatabaseSchemaSerializer
 
     def get_queryset(self):
         return models.DatabaseSchema.objects.all()
 
 class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.TableSerializer
     
     serializer_classes = {
@@ -451,18 +476,21 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         return Response(data=results)
 
 class ColumnViewSet(viewsets.ModelViewSet):
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.ColumnSerializer
 
     def get_queryset(self):
         return models.Column.objects.all()
 
 class ColumnConstraintViewSet(viewsets.ModelViewSet):
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.ColumnConstraintSerializer
 
     def get_queryset(self):
         return models.ColumnConstraint.objects.all()
 
 class ServerViewSet(viewsets.ModelViewSet):
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.ServerSerializer
 
     def get_queryset(self):

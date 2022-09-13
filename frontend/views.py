@@ -3,7 +3,7 @@ import io
 import json
 import re
 
-from django.db.models import Count, Max, Sum
+from django.db.models import Count, F, Max, Sum
 from django.db.models.functions import Coalesce
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import render, redirect
@@ -16,7 +16,8 @@ from ferdolt import models as ferdolt_models
 from flux import models as flux_models
 from groups import models as groups_models
 
-from core.functions import get_column_datatype, get_database_connection, sql_server_regex, postgresql_regex
+from core.functions import ( get_column_datatype, get_database_connection, 
+sql_server_regex, postgresql_regex )
 
 def get_file_size_and_unit(size, number_of_decimal_places=2):
     return_size = size
@@ -41,7 +42,6 @@ def get_file_size_and_unit(size, number_of_decimal_places=2):
 ################################################################################################
 # Views
 ################################################################################################
-
 def index(request):
     now = timezone.now()
     # adding this delta to the current time will give us midnight of today
@@ -50,7 +50,12 @@ def index(request):
     databases = (
         ferdolt_models.Database.objects.all()
         .order_by('-time_added').annotate(Count('id'))
+    ).annotate(
+        synchronization_count=Count(flux_models.ExtractionTargetDatabase.objects.filter(
+            database__id=F("id")
+        ).values("id"))
     )
+
     database_count = databases.count()
     
     today_databases = databases.filter( time_added__gte=now-delta )

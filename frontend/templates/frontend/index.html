@@ -190,16 +190,16 @@
                             <thead>
                                 <tr>
                                     <th>Database</th>
-                                    <th class="text-end">{% trans 'Extractions' %}</th>
-                                    <th class="text-end">{% trans 'Synchronizations' %}</th>
+                                    <th>{% trans 'Extractions' %}</th>
+                                    <th>{% trans 'Synchronizations' %}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for database in databases %}
                                 <tr>
                                     <td>{{ database.name }}</td>
-                                    <td>{{ database.extractiondatabase_set.count }}</td>
-                                    <td>{{ database.synchronizationdatabase_set.count }}</td>
+                                    <td>{{ database.extractionsourcedatabase_set.count }}</td>
+                                    <td>{{ database.synchronization_count }}</td>
                                 </tr>
                                 {% endfor %}
 

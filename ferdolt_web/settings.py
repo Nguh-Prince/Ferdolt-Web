@@ -103,7 +103,7 @@ WSGI_APPLICATION = 'ferdolt_web.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': BASE_DIR / 'old_db.sqlite3',
         "ATOMIC_REQUESTS": True,
     }
 }

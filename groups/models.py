@@ -1,3 +1,6 @@
+import logging
+from cryptography import fernet
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -5,12 +8,37 @@ from django.utils.translation import gettext as _
 
 from slugify import slugify
 
+from core.functions import encrypt, decrypt
+
 from ferdolt import models as ferdolt_models
 from flux.models import Extraction, Synchronization
+
+def generate_unique_fernet_key():
+    while True:
+        generated_key_is_unique = True
+
+        key = fernet.Fernet.generate_key()
+
+        for group in Group.objects.all():
+            try:
+                group_key = decrypt(group.fernet_key)[0]
+
+                if group_key == key:
+                    generated_key_is_unique = False
+
+            except fernet.InvalidToken as e:
+                logging.info(f"[In groups.models.generate_key] fernet.InvalidToken error raised when decrypting the key for the {group.__str__()} group")
+
+        if generated_key_is_unique:
+            return encrypt(key)[1]
+    
+def generate_fernet_key():
+    return encrypt( fernet.Fernet.generate_key() )[1]
 
 class Group(models.Model):
     name = models.CharField(unique=True, max_length=50)
     slug = models.CharField(max_length=50, null=False)
+    fernet_key = models.TextField(unique=True, null=True)
 
     @property
     def databases(self):
@@ -20,6 +48,9 @@ class Group(models.Model):
         self.slug = slugify(self.name)
 
         return super().save(*args, **kwargs)
+
+    def get_fernet_key(self):
+        return decrypt(self.fernet_key)[1]
 
 class GroupDatabase(models.Model):
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE, null=True)

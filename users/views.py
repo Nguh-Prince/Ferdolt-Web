@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from . import serializers
-from .utils import get_and_authenticate_user, create_user_account
+from .utils import get_and_authenticate_user
 
 User = get_user_model()
 
@@ -29,16 +29,6 @@ class AuthViewSet(viewsets.GenericViewSet):
         user = get_and_authenticate_user(**serializer.validated_data)
         data = serializers.AuthenticatedUserSerializer(user).data
         return Response(data=data, status=status.HTTP_200_OK)
-
-    # @action(methods=['POST'], detail=False)
-    # def register(self, request):
-    #     serializer = self.get_serializer(data=request.data)
-    #     serializer.is_valid(raise_exception=True)
-    #     person = serializer.validated_data.pop('person')
-    #     user = create_user_account(**serializer.validated_data, **person)
-
-    #     data = serializers.AuthenticatedUserSerializer(user).data
-    #     return Response(data=data, status=status.HTTP_201_CREATED)
 
     @action(methods=['POST'], detail=False)
     def logout(self, request):

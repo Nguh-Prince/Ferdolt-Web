@@ -16,6 +16,7 @@ from rest_framework.decorators import action
 from rest_framework import permissions as drf_permissions
 from rest_framework.response import Response
 from rest_framework.serializers import ValidationError
+from common.permissions import IsStaff
 
 from flux import serializers
 
@@ -30,7 +31,7 @@ from ferdolt_web.settings import FERNET_KEY
 from frontend.views import get_database_connection
 
 class FileViewSet(viewsets.ModelViewSet):
-    permission_classes = [drf_permissions.IsAuthenticated, ]
+    permission_classes = [ IsStaff ]
 
     serializer_class = serializers.FileSerializer
     def get_queryset(self):
@@ -43,7 +44,7 @@ class FileViewSet(viewsets.ModelViewSet):
         return Response( data={"message": _("This method is not allowed")}, status=status.HTTP_401_UNAUTHORIZED )
 
 class ExtractionViewSet(viewsets.ModelViewSet):
-    permission_classes = [drf_permissions.IsAuthenticated, ]
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.ExtractionSerializer
 
     def get_queryset(self):
@@ -84,7 +85,7 @@ class ExtractionViewSet(viewsets.ModelViewSet):
 deletion_table_regex = re.compile("_deletion$")
 
 class SynchronizationViewSet(viewsets.ModelViewSet):
-    permission_classes = [drf_permissions.IsAuthenticated, ]
+    permission_classes = [ IsStaff ]
     serializer_class = serializers.SynchronizationSerializer
 
     def get_queryset(self):
@@ -148,6 +149,7 @@ class SynchronizationViewSet(viewsets.ModelViewSet):
                                         except json.JSONDecodeError as e:
                                             logging.error( f"[In flux.views.SynchronizationViewSet.create]. Error parsing json from file for database synchronization. File path: {file_path}" )
 
+                                zip_file.close()
                             except FileNotFoundError as e:
                                 flag = False
                                 logging.error( f"[In flux.views.SynchronizationViewSet.create]. Error opening file for database synchronization. File path: {file_path}" )
