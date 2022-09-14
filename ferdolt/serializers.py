@@ -3,8 +3,10 @@ from rest_framework import serializers
 import sqlite3
 from django.utils.translation import gettext as _
 
+import psycopg
 import pyodbc
-from core.functions import encrypt
+
+from core.functions import encrypt, initialize_database
 
 from ferdolt_web import settings
 from frontend.views import get_database_connection
@@ -63,7 +65,11 @@ class DatabaseSerializer(serializers.ModelSerializer):
         model = models.Database
         fields = ( "id", "name", "username", "password", 
         'host', 'port', 'schemas', 'version', 'instance_name', "clear_username", "clear_password", 
-        'clear_host', 'clear_port', )
+        'clear_host', 'clear_port', 'is_initialized', 'provides_successful_connection')
+        extra_kwargs = {
+            'is_initialized': {'read_only': True},
+            'provides_successful_connection': {'read_only': True}
+        }
 
     def validate_username(self, data):
         data = encrypt(data)[1]
@@ -98,6 +104,19 @@ class DatabaseSerializer(serializers.ModelSerializer):
 
         instance = self.Meta.model(dbms_version=version, **validated_data)
         instance.save()
+
+        connection = get_database_connection(instance)
+
+        if connection:
+            instance.provides_successful_connection = True
+            try:
+                initialize_database(instance)
+                instance.is_initialized = True
+                instance.save()
+            except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                logging.error(f"Error when initializing the {instance.__str__()} database. Error: {e}")
+
+            instance.save()
 
         return instance
 

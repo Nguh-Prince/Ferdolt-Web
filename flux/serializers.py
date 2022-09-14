@@ -3,8 +3,10 @@ import json
 import logging
 import os
 import datetime as dt
+from sqlite3 import ProgrammingError
 import zipfile
 
+import psycopg
 import pyodbc
 
 from cryptography.fernet import Fernet
@@ -282,24 +284,34 @@ class ExtractionSerializer(serializers.ModelSerializer):
                             _schema = schema['schema']
 
                             schema_tables_key = 'extractionsourcetable_set'
+
                             if schema_tables_key in schema and schema[schema_tables_key]:
                                 tables = schema[schema_tables_key]
 
                                 for _table in tables:
                                     table: ferdolt_models.Table = _table['table']
+                                    deletion_table = table.deletion_table
                                     
                                     table_query_name = table.get_queryname()
+                                    deletion_table_query_name = deletion_table.get_queryname()
 
                                     schema_dictionary = database_dictionary.setdefault(_schema.name, {})
-                                    table_results = schema_dictionary.setdefault( table.name, [] )
+                                    table_dictionary = schema_dictionary.setdefault( table.name, {} )
+
+                                    table_rows = table_dictionary.setdefault( "rows", [] )
+                                    table_deleted_rows = table_dictionary.setdefault("deletions", [])
 
                                     time_field = table.column_set.filter( Q(name='last_updated') | Q(name="deletion_time") )
+                                    deletion_time_field = "deletion_time"
             
                                     query = f"""
                                     SELECT { ', '.join( [ column.name for column in table.column_set.all() ] ) } FROM {table_query_name} 
                                     { f"WHERE { time_field.first().name } >= ?" if start_time and time_field.exists() and use_time else "" }
                                     """
-
+                                    deletion_query = f"""
+                                    SELECT { ', '.join( [column.name for column in deletion_table.column_set.all()] ) } FROM { deletion_table_query_name } 
+                                    { f"WHERE { deletion_time_field } >= ?" if start_time and deletion_time_field and use_time else "" }
+                                    """
                                     try:
                                         rows = cursor.execute(query, start_time) if start_time and time_field.exists() and use_time else cursor.execute(query)
 
@@ -307,9 +319,25 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
                                         for row in rows:
                                             row_dictionary = dict( zip( columns, row ) )
-                                            table_results.append(row_dictionary)
-                                    except pyodbc.ProgrammingError as e:
+                                            table_rows.append(row_dictionary)
+
+                                    except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                         logging.error(f"Error occured when extracting from {database}.{table.schema.name}.{table.name}. Error: {str(e)}")
+                                        raise e
+
+                                    try:
+                                        deleted_rows = (cursor.execute( deletion_query, start_time ) 
+                                            if start_time and deletion_time_field and use_time
+                                            else cursor.execute(deletion_query)
+                                        )
+
+                                        columns = [ column[0] for column in cursor.description ]
+                                        for row in deleted_rows:
+                                            row_dictionary = dict( zip( columns, row ) )
+                                            table_deleted_rows.append( row_dictionary )
+
+                                    except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                                        logging.error( f"Erorr occured when extracting the deleted rows from the deletion table of {table.__str__()} (Deletion table: {deletion_table.__str__()}, Error: {str(e)})" )
                                         raise e
                         
                     else:
@@ -369,6 +397,7 @@ class ExtractionSerializer(serializers.ModelSerializer):
                                 raise e
                             except Exception as e:
                                 logging.error(f"The {database.__str__()} database was not synchronized successfully")
+                                logging.error(f"The exception raised: {str(e)}")
                                 flag = False
 
                             models.ExtractionTargetDatabase.objects.create(extraction=extraction, database=database, is_applied=synchronized_flag)

@@ -3,6 +3,8 @@ import logging
 
 from django.db import models
 
+from simple_history.models import HistoricalRecords
+
 from ferdolt import models as ferdolt_models
 
 class File(models.Model):
@@ -11,6 +13,7 @@ class File(models.Model):
     is_deleted = models.BooleanField(default=False)
     last_modified_time = models.DateTimeField(null=True)
     hash = models.TextField( null=True, blank=True )
+    history = HistoricalRecords()
 
     def save(self, *args, **kwargs):
         file_path = self.file.path
@@ -46,6 +49,7 @@ class File(models.Model):
 class Extraction(models.Model):
     time_made = models.DateTimeField()
     file = models.ForeignKey(File, on_delete=models.PROTECT)
+    history = HistoricalRecords()
      
     # this time is used to query the target database 
     # i.e. SELECT * FROM table WHERE last_updated > start_time
@@ -56,18 +60,22 @@ class ExtractionTargetDatabase(models.Model):
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE)
     is_applied = models.BooleanField(default=False)
     time_applied = models.DateTimeField(null=True)
+    history = HistoricalRecords()
 
 class ExtractionSourceDatabase(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE)
+    history = HistoricalRecords()
 
 class ExtractionSourceDatabaseSchema(models.Model):
     extraction_database = models.ForeignKey(ExtractionSourceDatabase, on_delete=models.CASCADE)
     schema = models.ForeignKey(ferdolt_models.DatabaseSchema, on_delete=models.CASCADE)
+    history = HistoricalRecords()
 
 class ExtractionSourceTable(models.Model):
     extraction_database_schema = models.ForeignKey(ExtractionSourceDatabaseSchema, on_delete=models.CASCADE)
     table = models.ForeignKey(ferdolt_models.Table, on_delete=models.CASCADE)
+    history = HistoricalRecords()
 
 class Synchronization(models.Model):
     time_received = models.DateTimeField(auto_now_add=True)
@@ -75,6 +83,7 @@ class Synchronization(models.Model):
     source = models.ForeignKey(ferdolt_models.Server, on_delete=models.SET_NULL, null=True)
     is_applied = models.BooleanField(default=False)
     file = models.ForeignKey(File, on_delete=models.PROTECT)
+    history = HistoricalRecords()
 
 class SynchronizationDatabase(models.Model):
     synchronization = models.ForeignKey(Synchronization, on_delete=models.CASCADE)
@@ -85,3 +94,4 @@ class Message(models.Model):
     time_sent = models.DateTimeField(auto_now_add=True)
     recipient = models.ForeignKey(ferdolt_models.Server, on_delete=models.CASCADE)
     file = models.ForeignKey(File, on_delete=models.CASCADE)
+    history = HistoricalRecords()

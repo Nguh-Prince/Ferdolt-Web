@@ -170,7 +170,6 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
                                     synchronizations_applied.append(synchronization.extraction)
 
-                    connection.close()
                 except FileNotFoundError as e:
                     logging.error(f"['In ferdolt.views.DatabaseViewSet.synchronize'] couldn't read extraction file {file_path} because it does not exist")
                     unapplied_synchronizations.append({
@@ -185,6 +184,7 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                         "error": _("Couldn't decrypt the extraction file")
                     })
 
+            connection.close()
         else:
             return Response(data={'message': _("Error connecting to the %(database_name)s database. Please ensure that your server is running and your credentials are correct" 
                 % {'database_name': database.name})}, 

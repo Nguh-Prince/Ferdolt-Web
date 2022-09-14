@@ -423,7 +423,10 @@ def get_database_details( database ):
     else:
         raise InvalidDatabaseConnectionParameters("""Error connecting to the database. Check if the credentials are correct or if the database is running""")
 
-def synchronize_database( connection, database_record, dictionary, temporary_tables_created=set([]) ):
+def synchronize_database( connection, database_record, dictionary, temporary_tables_created=None ):
+    if temporary_tables_created is None:
+        temporary_tables_created = set([])
+
     cursor = connection.cursor()
 
     dictionary_key = list( dictionary.keys() )[0] if len(dictionary.keys()) == 1 else None
@@ -438,182 +441,199 @@ def synchronize_database( connection, database_record, dictionary, temporary_tab
         dbms_booleans = get_dbms_booleans(database_record)
 
         item: dict = dictionary[dictionary_key]
+
+        tables_set = set([])
+
+        for schema in item.keys():
+            for table in item[schema].keys():
+                tables_set.add(table.lower())
+
         database_tables = ferdolt_models.Table.objects.filter(
             Q(schema__database=database_record)
         ) 
 
         # get tables that are not deletion tables
         tables = database_tables.filter(
-            ~Q( id__in=database_tables.filter(deletion_table__isnull=False).values("deletion_table__id") )
+            ~Q( id__in=database_tables.filter(deletion_table__isnull=False)
+                                        .values("deletion_table__id"))
+            & Q( name__in=tables_set )
+            & Q( schema__name__in=item.keys() )
         ).annotate(deletion_target_level=F("deletion_target__level")).order_by("level")
-
-        ferdolt_models.Table.objects.filter(
-            Q( schema__database=database_record ) & ~Q(id__in=ferdolt_models.Table.objects.filter(deletion_table__isnull=False, schema__database=database_record).values("deletion_table__id"))
-        ).annotate(deletion_target_level=F("deletion_target__level")).order_by('level')
 
         # get tables that are deletion tables
         deletion_tables = database_tables.filter(
-            ~Q( id__in=database_tables.filter(deletion_table__isnull=False)
-            .values("deletion_table__id") )
+            Q( id__in=tables.values("deletion_table__id") )
         ).annotate(deletion_target_level=F("deletion_target__level")).order_by("-deletion_target__level")
 
         for table in list(tables) + list(deletion_tables):
-            table_name = table.name.lower()
-            schema_name = table.schema.name.lower()
+            table_name = table.name.lower() if table.deletion_target_level is None else table.deletion_target.name.lower()
+            schema_name = table.schema.name.lower() if table.deletion_target_level is None else table.deletion_target.schema.name.lower()
 
-            # check if this table exists in the synchronization file and if there are any records to apply
-            if schema_name in item.keys() and table_name in item[schema_name].keys() and item[schema_name][table_name]:
-                table_rows = item[schema_name][table_name]
-                table_columns = set([
-                    f["name"] for f in table.column_set.values("name") if f["name"] in table_rows[0].keys()
-                ])
-                primary_key_columns = set([
+            table_dictionary_key = "rows" if table.deletion_target_level is None else "deletions"
+
+            table_rows = item[schema_name][table_name][table_dictionary_key]
+            table_columns = set([
+                f["name"] for f in table.column_set.values("name") if f["name"] in table_rows[0].keys()
+            ])
+
+            if table.deletion_target_level is None:
+                primary_key_columns = [
                     f["name"] for f in table.column_set.filter(columnconstraint__is_primary_key=True).values("name")
-                ])
+                ]
+            else: 
+                primary_key_columns = [
+                    f["name"] for f in table.deletion_target.column_set.filter(columnconstraint__is_primary_key=True).values("name")
+                ]
+            temporary_table_name = f"{table.schema.name.lower()}_{table.name.lower()}_temporary_table"
+            temporary_table_actual_name = get_temporary_table_name(database_record, temporary_table_name)
 
-                temporary_table_name = f"{schema_name}_{table_name}_temporary_table"
-                temporary_table_actual_name = get_temporary_table_name(database_record, temporary_table_name)
+            try:
+                # we create the temporary table only once and use the same table for each of the unapplied files
+                if temporary_table_actual_name not in temporary_tables_created:
+                    logging.info(f"Creating the {temporary_table_actual_name} temp table")
+                    create_temporary_table_query = get_create_temporary_table_query( database_record, temporary_table_name,  f"( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )" )
+    
+                    cursor.execute(create_temporary_table_query)
+                    temporary_tables_created.add( temporary_table_actual_name )
 
                 try:
-                    # we create the temporary table only once and use the same table for each of the unapplied files
-                    if temporary_table_actual_name not in temporary_tables_created:
-                        logging.info(f"Creating the {temporary_table_actual_name} temp table")
-                        print(f"Creating the {temporary_table_actual_name} temp table")
-                        create_temporary_table_query = get_create_temporary_table_query( database_record, temporary_table_name,  f"( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )" )
-                        
-                        cursor.execute(create_temporary_table_query)
-                        temporary_tables_created.add( temporary_table_actual_name )
-
+                    # emptying the temporary table in case of previous data
                     try:
-                        # emptying the temporary table in case of previous data
+                        cursor.execute(f"DELETE FROM {temporary_table_actual_name}")
+                    except pyodbc.ProgrammingError as e:
+                        logging.error(f"Error deleting from the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                        print(f"Error deleting from the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                        connection.rollback()
+
+                    insert_into_temporary_table_query = f"""
+                    INSERT INTO {temporary_table_actual_name} ( { ', '.join( [ column for column in table_columns ] ) } ) VALUES ( { ', '.join( [ '?' if isinstance(cursor, pyodbc.Cursor) else '%s'  for _ in table_columns ] ) } );
+                    """
+                    rows_to_insert = []
+
+                    # getting the list of tables for bulk insert
+                    for row in table_rows:
+                        rows_to_insert.append( tuple(
+                            row[f] for f in table_columns
+                        ) )
+
+                    cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
+
+                    if dbms_booleans['is_sqlserver_db']:
+                        # set identity_insert on to be able to explicitly write values for identity columns
                         try:
-                            cursor.execute(f"DELETE FROM {temporary_table_actual_name}")
+                            cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} ON")
                         except pyodbc.ProgrammingError as e:
-                            logging.error(f"Error deleting from the temporary table {temporary_table_actual_name}. Error: {str(e)}")
-                            print(f"Error deleting from the temporary table {temporary_table_actual_name}. Error: {str(e)}")
-                            connection.rollback()
+                            logging.error(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
+                            print(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
 
-                        insert_into_temporary_table_query = f"""
-                        INSERT INTO {temporary_table_actual_name} ( { ', '.join( [ column for column in table_columns ] ) } ) VALUES ( { ', '.join( [ '?' if isinstance(cursor, pyodbc.Cursor) else '%s'  for _ in table_columns ] ) } );
+                    merge_query = None
+
+                    if table.deletion_target_level is None: # the table is not a deletion table
+                        merge_query = ""
+
+                        if dbms_booleans["is_sqlserver_db"]:
+                            merge_query = f"""
+                        merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
+                            {
+                                ' AND '.join( [ f"t.{column} = s.{column}" for column in primary_key_columns ] ) 
+                            }
+                        ) 
+                        when matched and t.last_updated < s.last_updated then 
+                        update set {
+                            ' , '.join(
+                                [ f"{column} = s.{column}" for column in table_columns if column not in primary_key_columns ] )
+                        }
+
+                        when not matched then 
+                            insert ( { ', '.join( [ column for column in table_columns ] ) } ) values ( { ', '.join( [ f"s.{column}" for column in table_columns ] ) } )
+                        ;
                         """
-                        rows_to_insert = []
-
-                        # getting the list of tables for bulk insert
-                        for row in table_rows:
-                            rows_to_insert.append( tuple(
-                                row[f] for f in table_columns
-                            ) )
-
-                        cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
-
-                        if dbms_booleans['is_sqlserver_db']:
-                            # set identity_insert on to be able to explicitly write values for identity columns
-                            try:
-                                cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} ON")
-                            except pyodbc.ProgrammingError as e:
-                                logging.error(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
-                                print(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
-
-                        merge_query = None
-
-                        if not table.deletion_target_level: # the table is not a deletion table
-                            merge_query = ""
+                    
+                        elif dbms_booleans['is_postgres_db']:
+                            merge_query = f"""
+                            INSERT INTO {schema_name}.{table_name} (SELECT * FROM {temporary_table_actual_name}) 
+                            ON CONFLICT ( { ', '.join( [ column for column in primary_key_columns ] ) } )
+                            DO 
+                                UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) }
+                            """
+                    
+                    else:
+                        if len(primary_key_columns) == 1:
+                            deletion_table_row_identifier = "row_id"
 
                             if dbms_booleans["is_sqlserver_db"]:
                                 merge_query = f"""
-                            merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
-                                {
-                                    ' AND '.join( [ f"t.{column} = s.{column}" for column in primary_key_columns ] ) 
-                                }
-                            ) 
-                            when matched and t.last_updated < s.last_updated then 
-                            update set {
-                                ' , '.join(
-                                    [ f"{column} = s.{column}" for column in table_columns if column not in primary_key_columns ] )
-                            }
-
-                            when not matched then 
-                                insert ( { ', '.join( [ column for column in table_columns ] ) } ) values ( { ', '.join( [ f"s.{column}" for column in table_columns ] ) } )
-                            ;
-                            """
-                        
-                            elif dbms_booleans['is_postgres_db']:
-                                merge_query = f"""
-                                INSERT INTO {schema_name}.{table_name} (SELECT * FROM {temporary_table_actual_name}) 
-                                ON CONFLICT ( { ', '.join( [ column for column in primary_key_columns ] ) } )
-                                DO 
-                                    UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) }
+                                merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
+                                    {
+                                        f"t.{primary_key_columns[0]} = s.{deletion_table_row_identifier}"
+                                    }
+                                ) 
+                                when matched then 
+                                delete;
                                 """
+                            elif dbms_booleans["is_postgres_db"]:
+                                merge_query = f"""
+                                DELETE FROM {schema_name}.{table_name} WHERE { 
+                                    ' AND, '.join(
+                                        f"{column} IN (SELECT {column} FROM {temporary_table_actual_name})" 
+                                        for column in primary_key_columns
+                                    )
+                                    }
+                                """
+
+                
                         else:
-                            if len(primary_key_columns) == 1:
-                                if dbms_booleans["is_sqlserver_db"]:
-                                    merge_query = f"""
-                                    merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
-                                        {
-                                            f"t.{primary_key_columns[0]} = s.row_id"
-                                        }
-                                    ) 
-                                    when matched then 
-                                    delete
-                                    """
-                                elif dbms_booleans["is_postgres_db"]:
-                                    merge_query = f"""
-                                    DELETE FROM {schema_name}.{table_name} WHERE { 
-                                        ' AND, '.join(
-                                            f"{column} IN (SELECT {column} FROM {temporary_table_actual_name})" 
-                                            for column in primary_key_columns
-                                        )
-                                        }
-                                    """
-                            else:
-                                logging.error(f"Could not delete from {table.__str__()} table as it has a composite primary key")
-                                print(f"Could not delete from {table.__str__()} table as it has a composite primary key")
-                        select_all_query = f"SELECT * FROM {schema_name}.{table_name}"
+                            logging.error(f"Could not delete from {table.__str__()} table as it has a composite primary key")
+                            print(f"Could not delete from {table.__str__()} table as it has a composite primary key")
+                    select_all_query = f"SELECT * FROM {schema_name}.{table_name}"
 
-                        # execute merge query
-                        # merge is used to either insert update or do nothing based on certain conditions
-                        try:
-                            if merge_query:
-                                cursor.execute(merge_query)
-                                cursor.connection.commit()
-                        except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
-                            logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
-                            print(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
-                            cursor.connection.rollback()
-                            flag = False
-                        except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
-                            logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
-                            print(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
-                            cursor.connection.rollback()
-                            flag = False
-                            
-
-                        if dbms_booleans['is_sqlserver_db']:
-                            # set identity_insert off as only one table can have identity_insert on per session
-                            # if we don't set it off for this table, no other table will be able to have identity_insert on
-                            try:
-                                cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} OFF")
-                            except pyodbc.ProgrammingError as e:
-                                logging.error(f"Error setting identity_insert off for {schema_name}.{table_name} table. Error encountered: {str(e)}")
-                                print(f"Error setting identity_insert off for {schema_name}.{table_name} table. Error encountered: {str(e)}")
-                                connection.rollback()
-                                flag = False
-
-                    except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
-                        logging.error(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
-                        print(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
+                    # execute merge query
+                    # merge is used to either insert update or do nothing based on certain conditions
+                    try:
+                        if merge_query:
+                            cursor.execute(merge_query)
+                            cursor.connection.commit()
+                    except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                        logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
+                        print(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
                         cursor.connection.rollback()
                         flag = False
-                        raise e
+                    except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
+                        logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
+                        print(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
+                        cursor.connection.rollback()
+                        flag = False
+                        
 
-                except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
-                    logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
-                    print(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                    if dbms_booleans['is_sqlserver_db']:
+                        # set identity_insert off as only one table can have identity_insert on per session
+                        # if we don't set it off for this table, no other table will be able to have identity_insert on
+                        try:
+                            cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} OFF")
+                        except pyodbc.ProgrammingError as e:
+                            logging.error(f"Error setting identity_insert off for {schema_name}.{table_name} table. Error encountered: {str(e)}")
+                            print(f"Error setting identity_insert off for {schema_name}.{table_name} table. Error encountered: {str(e)}")
+                            connection.rollback()
+                            flag = False
+
+                except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
+                    logging.error(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
+                    # print(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
+                    logging.error(f"Query to insert into temporary table {insert_into_temporary_table_query}")
                     cursor.connection.rollback()
-                    print(f"The temporary tables that have already been created are: ")
-                    print(temporary_tables_created)
-                    raise e
                     flag = False
+                    raise e
+
+            except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                print(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                cursor.connection.rollback()
+                print(f"The temporary tables that have already been created are: ")
+                print(temporary_tables_created)
+
+                print(f"The query to create the temporary tables: {create_temporary_table_query}")
+                raise e
+                flag = False
 
             
 def create_sequence_query(sequence_name, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, data_type='int', start=1, minvalue=1, cycle='true', increment=1):

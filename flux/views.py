@@ -23,7 +23,7 @@ from flux import serializers
 from . import models
 from .serializers import SynchronizationSerializer
 
-from core.functions import (get_create_temporary_table_query, get_dbms_booleans, 
+from core.functions import (decrypt, get_create_temporary_table_query, get_dbms_booleans, 
 get_temporary_table_name, get_type_and_precision, get_column_dictionary, synchronize_database)
 
 from ferdolt import models as ferdolt_models
@@ -69,15 +69,25 @@ class ExtractionViewSet(viewsets.ModelViewSet):
         object = self.get_object()
 
         f = Fernet(FERNET_KEY)
+        file_path = object.file.file.path
+        file = object.file
 
         try:
             content = None
+            zip_file = zipfile.ZipFile(file_path)
 
-            with open(object.file.file.path) as __:
-                content = __.read()
-                content = f.decrypt( content.encode('utf-8') ).decode('utf-8')
+            for file in zip_file.namelist():
+                if file.endswith('.json'):
+                    content = zip_file.read(file)
+                    
+                    if content:
+                        content = decrypt(content)[1]
+                        logging.debug("[In flux.views.SynchronizationViewSet.create] reading the unapplied synchronization file")
+
+            zip_file.close()
                 
-            return Response( data=json.loads(content) )
+            return Response( data={'content': json.loads(content), 
+            'message': _('Content gotten successfully') if content else _('The extraction is empty')} )
         except FileNotFoundError as e:
             return Response(data={'message': _("The file was not found. It has either been deleted, moved or renamed")}, 
             status=status.HTTP_404_NOT_FOUND)

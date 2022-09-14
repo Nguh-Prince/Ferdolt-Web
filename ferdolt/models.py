@@ -1,9 +1,12 @@
+import string
+import random
+
 from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext as _
 
-import string
-import random
+from simple_history.models import HistoricalRecords
+
 
 from cryptography import fernet
 
@@ -41,6 +44,9 @@ class Database(models.Model):
     host = models.CharField(max_length=150, default="localhost")
     port = models.CharField(default='1433', max_length=5)
     time_added = models.DateTimeField(auto_now_add=True)
+    history = HistoricalRecords()
+    provides_successful_connection = models.BooleanField(default=False)
+    is_initialized = models.BooleanField(default=False)
 
     class Meta:
         unique_together = [
@@ -75,6 +81,7 @@ class Database(models.Model):
 class DatabaseSchema(models.Model):
     database = models.ForeignKey(Database, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
+    history = HistoricalRecords()
 
     class Meta:
         verbose_name = _("Database schema")
@@ -99,6 +106,7 @@ class Table(models.Model):
     level = models.IntegerField(default=0) # this level is the order in which items should be added to tables to avoid integrity errors 
     # starts with 0 (these are the parent tables with no external foreign keys)
     deletion_table = models.OneToOneField('self', on_delete=models.SET_NULL, null=True, related_name='deletion_target')
+    history = HistoricalRecords()
 
     class Meta:
         verbose_name = _("Table")
@@ -155,6 +163,7 @@ class Column(models.Model):
     character_maximum_length: str = models.IntegerField(null=True, blank=True)
     numeric_precision: int = models.IntegerField(null=True, blank=True)
     is_nullable: bool = models.BooleanField(default=True)
+    history = HistoricalRecords()
 
     class Meta:
         verbose_name = _("Column")
@@ -179,6 +188,7 @@ class ColumnConstraint(models.Model):
     is_primary_key: bool = models.BooleanField(default=False)
     is_foreign_key: bool = models.BooleanField(default=False)
     references: Column = models.ForeignKey(Column, null=True, on_delete=models.SET_NULL, related_name='references', blank=True)
+    history = HistoricalRecords()
 
     class Meta:
         ordering = [ "column__table__schema__database__name", "column__table__schema__name", "column__table__name", "column__name", "is_primary_key", "is_foreign_key" ]
@@ -229,6 +239,7 @@ class Server(models.Model):
     server_id = models.CharField(max_length=ID_MAX_LENGTH, unique=True, default=generate_server_id)
     address = models.CharField(max_length=150)
     port = models.IntegerField(null=True, blank=True)
+    history = HistoricalRecords()
 
     def save(self, *args, **kwargs):
         self.name = self.name.lower()

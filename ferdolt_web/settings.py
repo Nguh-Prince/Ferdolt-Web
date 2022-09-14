@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'communication',
     'users',
     "rest_framework.authtoken",
+    'simple_history'
 ]
 
 ASGI_APPLICATION = 'ferdolt_web.asgi.application'
@@ -60,6 +61,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'simple_history.middleware.HistoryRequestMiddleware',
 ]
 
 REST_FRAMEWORK = {
