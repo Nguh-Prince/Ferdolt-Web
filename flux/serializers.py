@@ -395,10 +395,11 @@ class ExtractionSerializer(serializers.ModelSerializer):
 
                             except TypeError as e:
                                 raise e
-                            except Exception as e:
-                                logging.error(f"The {database.__str__()} database was not synchronized successfully")
-                                logging.error(f"The exception raised: {str(e)}")
-                                flag = False
+                            # except Exception as e:
+                            #     logging.error(f"The {database.__str__()} database was not synchronized successfully")
+                            #     logging.error(f"The exception raised: {str(e)}")
+                            #     flag = False
+                            #     raise e
 
                             models.ExtractionTargetDatabase.objects.create(extraction=extraction, database=database, is_applied=synchronized_flag)
 

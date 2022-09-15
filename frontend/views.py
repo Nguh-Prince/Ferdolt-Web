@@ -2,7 +2,11 @@ from datetime import timedelta
 import io
 import json
 import re
+import urllib
 
+from django.contrib.auth import login, logout
+from django.contrib.auth.hashers import check_password
+from django.contrib.auth.models import User
 from django.db.models import Count, F, Max, Sum
 from django.db.models.functions import Coalesce
 from django.http import FileResponse, HttpResponse
@@ -42,6 +46,64 @@ def get_file_size_and_unit(size, number_of_decimal_places=2):
 ################################################################################################
 # Views
 ################################################################################################
+
+def login_view(request):
+    if request.method == "POST":
+        username = request.POST["username"]
+        password = request.POST["password"]
+        
+        try:
+            user = User.objects.get(username=username)
+        except Exception:
+            context = {
+                "errrors": [
+                    {
+                        "message": _("Username or password incorrect"),
+                        "time": timezone.now(),
+                    }
+                ]
+            }
+            return render(request, "frontend/login.html", context=context)
+
+        if not check_password(password, user.password):
+            return render(
+                request,
+                "frontend/login.html",
+                context={
+                    "errors": [
+                        {
+                            "message": _("Username or password incorrect"),
+                            "time": timezone.now(),
+                        }
+                    ]
+                },
+            )
+
+        if not user.is_active:
+            return render(
+                request,
+                "frontend/login.html",
+                context={
+                    "errors": [
+                        {
+                            "message": _("User account has been deactivated"),
+                            "time": timezone.now(),
+                        }
+                    ]
+                },
+            )
+
+        login(request, user)
+        # to prevent javascript from character escaping the timezone
+        tz = urllib.parse.quote_plus("Africa/Douala")
+
+        response = redirect("frontend:index")
+
+        return response
+    else:
+        return render(request, "frontend/login.html")
+
+
 def index(request):
     now = timezone.now()
     # adding this delta to the current time will give us midnight of today

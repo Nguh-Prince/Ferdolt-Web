@@ -285,25 +285,20 @@ def get_table_foreign_key_references(table: ferdolt_models.Table, connection=Non
                             constraint[0].save()
 
                             logging.info(f"Successfully { 'created' if constraint[1] else 'modified' } the foreign key constraint in the {table.__str__()} table")
-                            print(f"Successfully { 'created' if constraint[1] else 'modified' } the foreign key constraint in the {table.__str__()} table")
                         except ferdolt_models.ColumnConstraint.MultipleObjectsReturned as e:
                             logging.error(f"Multiple foreign key constraints on the {referencing_column.name.lower()} column in the {table.__str__()} table")
-                            print(f"Multiple foreign key constraints on the {referencing_column.name.lower()} column in the {table.__str__()} table")
 
                     except ferdolt_models.Column.DoesNotExist as e:
                         logging.error(f"Couldn't find the {record['column_name']} column in the {record['table_name']} table")
-                        print(f"Couldn't find the {record['column_name']} column in the {record['table_name']} table")
                     
                     except IntegrityError as e:
                         logging.error(f"Error adding foreign key constraint on {table.name}{record['referencing_column']} to {record['table_name']}.{record['column_name']}. Error: {str(e)}")
-                        print(f"Error adding foreign key constraint on {table.name}{record['referencing_column']} to {record['table_name']}.{record['column_name']}. Error: {str(e)}")
 
                     except ferdolt_models.Column.MultipleObjectsReturned as e:
                         logging.error(f"Multiple {record['column_name']} columns in the {record['table_name']} table")
 
                 except ferdolt_models.Column.DoesNotExist as e:
                     logging.error(f"Couldn't find the {record['column_name']} column in the {record['table_name']} table")
-                    print(f"Couldn't find the {record['column_name']} column in the {record['table_name']} table")
 
 def get_database_structure_dictionary(database, connection):
     """
@@ -464,7 +459,7 @@ def synchronize_database( connection, database_record, dictionary, temporary_tab
         deletion_tables = database_tables.filter(
             Q( id__in=tables.values("deletion_table__id") )
         ).annotate(deletion_target_level=F("deletion_target__level")).order_by("-deletion_target__level")
-
+        
         for table in list(tables) + list(deletion_tables):
             table_name = table.name.lower() if table.deletion_target_level is None else table.deletion_target.name.lower()
             schema_name = table.schema.name.lower() if table.deletion_target_level is None else table.deletion_target.schema.name.lower()
@@ -472,100 +467,102 @@ def synchronize_database( connection, database_record, dictionary, temporary_tab
             table_dictionary_key = "rows" if table.deletion_target_level is None else "deletions"
 
             table_rows = item[schema_name][table_name][table_dictionary_key]
-            table_columns = set([
-                f["name"] for f in table.column_set.values("name") if f["name"] in table_rows[0].keys()
-            ])
 
-            if table.deletion_target_level is None:
-                primary_key_columns = [
-                    f["name"] for f in table.column_set.filter(columnconstraint__is_primary_key=True).values("name")
-                ]
-            else: 
-                primary_key_columns = [
-                    f["name"] for f in table.deletion_target.column_set.filter(columnconstraint__is_primary_key=True).values("name")
-                ]
-            temporary_table_name = f"{table.schema.name.lower()}_{table.name.lower()}_temporary_table"
-            temporary_table_actual_name = get_temporary_table_name(database_record, temporary_table_name)
-
-            try:
-                # we create the temporary table only once and use the same table for each of the unapplied files
-                if temporary_table_actual_name not in temporary_tables_created:
-                    logging.info(f"Creating the {temporary_table_actual_name} temp table")
-                    create_temporary_table_query = get_create_temporary_table_query( database_record, temporary_table_name,  f"( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )" )
-    
-                    cursor.execute(create_temporary_table_query)
-                    temporary_tables_created.add( temporary_table_actual_name )
+            if table_rows:
+                table_columns = set([
+                    f["name"] for f in table.column_set.values("name") if f["name"] in table_rows[0].keys()
+                ])
+                if table.deletion_target_level is None:
+                    primary_key_columns = [
+                        f["name"] for f in table.column_set.filter(columnconstraint__is_primary_key=True).values("name")
+                    ]
+                else: 
+                    primary_key_columns = [
+                        f["name"] for f in table.deletion_target.column_set.filter(columnconstraint__is_primary_key=True).values("name")
+                    ]
+                temporary_table_name = f"{table.schema.name.lower()}_{table.name.lower()}_temporary_table"
+                temporary_table_actual_name = get_temporary_table_name(database_record, temporary_table_name)
 
                 try:
-                    # emptying the temporary table in case of previous data
+                    # we create the temporary table only once and use the same table for each of the unapplied files
+                    if temporary_table_actual_name not in temporary_tables_created:
+                        logging.info(f"Creating the {temporary_table_actual_name} temp table")
+                        create_temporary_table_query = get_create_temporary_table_query( database_record, temporary_table_name,  f"( { ', '.join( [ get_type_and_precision(column, get_column_dictionary(table, column)) for column in table_columns ] ) } )" )
+        
+                        cursor.execute(create_temporary_table_query)
+                        temporary_tables_created.add( temporary_table_actual_name )
+
                     try:
-                        cursor.execute(f"DELETE FROM {temporary_table_actual_name}")
-                    except pyodbc.ProgrammingError as e:
-                        logging.error(f"Error deleting from the temporary table {temporary_table_actual_name}. Error: {str(e)}")
-                        print(f"Error deleting from the temporary table {temporary_table_actual_name}. Error: {str(e)}")
-                        connection.rollback()
-
-                    insert_into_temporary_table_query = f"""
-                    INSERT INTO {temporary_table_actual_name} ( { ', '.join( [ column for column in table_columns ] ) } ) VALUES ( { ', '.join( [ '?' if isinstance(cursor, pyodbc.Cursor) else '%s'  for _ in table_columns ] ) } );
-                    """
-                    rows_to_insert = []
-
-                    # getting the list of tables for bulk insert
-                    for row in table_rows:
-                        rows_to_insert.append( tuple(
-                            row[f] for f in table_columns
-                        ) )
-
-                    cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
-
-                    if dbms_booleans['is_sqlserver_db']:
-                        # set identity_insert on to be able to explicitly write values for identity columns
+                        # emptying the temporary table in case of previous data
                         try:
-                            cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} ON")
+                            cursor.execute(f"DELETE FROM {temporary_table_actual_name}")
                         except pyodbc.ProgrammingError as e:
-                            logging.error(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
-                            print(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
+                            logging.error(f"Error deleting from the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                            print(f"Error deleting from the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                            connection.rollback()
+                            raise e
 
-                    merge_query = None
-
-                    if table.deletion_target_level is None: # the table is not a deletion table
-                        merge_query = ""
-
-                        if dbms_booleans["is_sqlserver_db"]:
-                            merge_query = f"""
-                        merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
-                            {
-                                ' AND '.join( [ f"t.{column} = s.{column}" for column in primary_key_columns ] ) 
-                            }
-                        ) 
-                        when matched and t.last_updated < s.last_updated then 
-                        update set {
-                            ' , '.join(
-                                [ f"{column} = s.{column}" for column in table_columns if column not in primary_key_columns ] )
-                        }
-
-                        when not matched then 
-                            insert ( { ', '.join( [ column for column in table_columns ] ) } ) values ( { ', '.join( [ f"s.{column}" for column in table_columns ] ) } )
-                        ;
+                        insert_into_temporary_table_query = f"""
+                        INSERT INTO {temporary_table_actual_name} ( { ', '.join( [ column for column in table_columns ] ) } ) 
+                        VALUES ( { ', '.join( [ '?' if isinstance(cursor, pyodbc.Cursor) else '%s'  for _ in table_columns ] ) } );
                         """
-                    
-                        elif dbms_booleans['is_postgres_db']:
-                            merge_query = f"""
-                            INSERT INTO {schema_name}.{table_name} (SELECT * FROM {temporary_table_actual_name}) 
-                            ON CONFLICT ( { ', '.join( [ column for column in primary_key_columns ] ) } )
-                            DO 
-                                UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) }
-                            """
-                    
-                    else:
-                        if len(primary_key_columns) == 1:
-                            deletion_table_row_identifier = "row_id"
+                        rows_to_insert = []
+
+                        # getting the list of tables for bulk insert
+                        for row in table_rows:
+                            rows_to_insert.append( tuple(
+                                row[f] for f in table_columns
+                            ) )
+
+                        cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
+                        if dbms_booleans['is_sqlserver_db']:
+                            # set identity_insert on to be able to explicitly write values for identity columns
+                            try:
+                                cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} ON")
+                            except pyodbc.ProgrammingError as e:
+                                logging.error(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
+                                print(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
+                                raise e
+
+                        merge_query = None
+
+                        if table.deletion_target_level is None: # the table is not a deletion table
+                            merge_query = ""
+
+                            if dbms_booleans["is_sqlserver_db"]:
+                                merge_query = f"""
+                                    merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
+                                        {
+                                            ' AND '.join( [ f"t.{column} = s.{column}" for column in primary_key_columns ] ) 
+                                        }
+                                    ) 
+                                    when matched and t.last_updated < s.last_updated then 
+                                    update set {
+                                        ' , '.join(
+                                            [ f"{column} = s.{column}" for column in table_columns if column not in primary_key_columns ] )
+                                    }
+
+                                    when not matched then 
+                                        insert ( { ', '.join( [ column for column in table_columns ] ) } ) values ( { ', '.join( [ f"s.{column}" for column in table_columns ] ) } )
+                                    ;
+                                """
+                        
+                            elif dbms_booleans['is_postgres_db']:
+                                merge_query = f"""
+                                INSERT INTO {schema_name}.{table_name} (SELECT * FROM {temporary_table_actual_name}) 
+                                ON CONFLICT ( { ', '.join( [ column for column in primary_key_columns ] ) } )
+                                DO 
+                                    UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) }
+                                """
+                        
+                        else:
+                            deletion_table_row_identifier = "row_tracking_id"
 
                             if dbms_booleans["is_sqlserver_db"]:
                                 merge_query = f"""
                                 merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
                                     {
-                                        f"t.{primary_key_columns[0]} = s.{deletion_table_row_identifier}"
+                                        f"t.tracking_id = s.{deletion_table_row_identifier}"
                                     }
                                 ) 
                                 when matched then 
@@ -581,64 +578,69 @@ def synchronize_database( connection, database_record, dictionary, temporary_tab
                                     }
                                 """
 
-                
-                        else:
-                            logging.error(f"Could not delete from {table.__str__()} table as it has a composite primary key")
-                            print(f"Could not delete from {table.__str__()} table as it has a composite primary key")
-                    select_all_query = f"SELECT * FROM {schema_name}.{table_name}"
-
-                    # execute merge query
-                    # merge is used to either insert update or do nothing based on certain conditions
-                    try:
-                        if merge_query:
-                            cursor.execute(merge_query)
-                            cursor.connection.commit()
-                    except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
-                        logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
-                        print(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
-                        cursor.connection.rollback()
-                        flag = False
-                    except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
-                        logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
-                        print(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
-                        cursor.connection.rollback()
-                        flag = False
-                        
-
-                    if dbms_booleans['is_sqlserver_db']:
-                        # set identity_insert off as only one table can have identity_insert on per session
-                        # if we don't set it off for this table, no other table will be able to have identity_insert on
+                        # execute merge query
+                        # merge is used to either insert update or do nothing based on certain conditions
                         try:
-                            cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} OFF")
-                        except pyodbc.ProgrammingError as e:
-                            logging.error(f"Error setting identity_insert off for {schema_name}.{table_name} table. Error encountered: {str(e)}")
-                            print(f"Error setting identity_insert off for {schema_name}.{table_name} table. Error encountered: {str(e)}")
-                            connection.rollback()
+                            if merge_query:
+                                cursor.execute(merge_query)
+                                connection.commit()
+                        except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                            logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
+                            print(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
+                            cursor.connection.rollback()
                             flag = False
+                            raise e
+                        
+                        except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
+                            logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
+                            print(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
+                            connection.rollback()
+                            raise e
+                            flag = False
+                            
 
-                except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
-                    logging.error(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
-                    # print(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
-                    logging.error(f"Query to insert into temporary table {insert_into_temporary_table_query}")
+                        if dbms_booleans['is_sqlserver_db']:
+                            # set identity_insert off as only one table can have identity_insert on per session
+                            # if we don't set it off for this table, no other table will be able to have identity_insert on
+                            try:
+                                cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} OFF")
+                            except pyodbc.ProgrammingError as e:
+                                logging.error(f"Error setting identity_insert off for {schema_name}.{table_name} table. Error encountered: {str(e)}")
+                                print(f"Error setting identity_insert off for {schema_name}.{table_name} table. Error encountered: {str(e)}")
+                                connection.rollback()
+                                raise e
+                                flag = False
+
+                    except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
+                        logging.error(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
+                        # print(f"Error inserting into temporary table {temporary_table_actual_name}. Error encountered: {str(e)}")
+                        logging.error(f"Query to insert into temporary table {insert_into_temporary_table_query}")
+                        cursor.connection.rollback()
+                        flag = False
+                        raise e
+
+                except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                    logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
+                    print(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
                     cursor.connection.rollback()
+                    print(f"The temporary tables that have already been created are: ")
+                    print(temporary_tables_created)
+                    print(f"The query to create the temporary tables: {create_temporary_table_query}")
                     flag = False
                     raise e
-
-            except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
-                logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
-                print(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}")
-                cursor.connection.rollback()
-                print(f"The temporary tables that have already been created are: ")
-                print(temporary_tables_created)
-
-                print(f"The query to create the temporary tables: {create_temporary_table_query}")
-                raise e
-                flag = False
-
             
-def create_sequence_query(sequence_name, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, data_type='int', start=1, minvalue=1, cycle='true', increment=1):
+def create_sequence_query(sequence_name, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, data_type='int', start=1, minvalue=1, cycle='true', increment=1, maxvalue=99):
+    if not is_postgres_db and not is_mysql_db and not is_sqlserver_db:
+        raise ValueError("One of the followin have to be True: is_postgres_db, is_mysql_db, is_sqlserver_db")
+
     if is_sqlserver_db:
-        return f"CREATE SEQUENCE {sequence_name} AS {data_type} START WITH {start} INCREMENT BY {increment} MINVALUE {minvalue} { 'CYCLE' if cycle else '' }"
+        return f"""
+        IF NOT EXISTS (SELECT 1 FROM sys.sequences WHERE name = '{sequence_name}')
+        BEGIN
+            CREATE SEQUENCE {sequence_name} AS {data_type} START WITH {start} INCREMENT BY {increment} MINVALUE {minvalue} { 'CYCLE' if cycle else '' } MAXVALUE {maxvalue}
+        END    
+        """
+
 
 def create_datetime_column_with_default_now_query(table, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, column_name='last_updated'):
     """
@@ -651,6 +653,18 @@ def create_datetime_column_with_default_now_query(table, is_postgres_db=False, i
                 BEGIN
                     ALTER TABLE {table.schema.name}.{table.name} ADD last_updated DATETIME2(3) DEFAULT CURRENT_TIMESTAMP;
                 END
+        """
+
+def get_create_tracking_id_column_query(table, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, column_name='tracking_id', length=len(SERVER_ID) + 16):
+    """
+    returns the query to create the tracking_id column
+    """
+    if is_sqlserver_db:
+        return f"""
+            IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table.name}' AND TABLE_SCHEMA = '{table.schema.name}' AND COLUMN_NAME = '{column_name}')
+            BEGIN
+                ALTER TABLE {table.schema.name}.{table.name} ADD {column_name} VARCHAR({length});
+            END
         """
 
 def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column, sequence_name, server_id, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, column_name='tracking_id', primary_key_column_data_type='int'):
@@ -702,14 +716,14 @@ def set_tracking_id_where_null_query_multiple_primary_keys(table, primary_key_co
 
     if is_sqlserver_db:
         return f"""
-        IF EXISTS ( SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table.name}' AND TABLE_SCHEMA = '{table_name}' AND COLUMN_NAME = {column_name} )
+        IF EXISTS ( SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table.name}' AND TABLE_SCHEMA = '{table.schema.name}' AND COLUMN_NAME = '{column_name}' )
         BEGIN
             DECLARE @SQL VARCHAR(5000);
             SET @SQL = ' DECLARE @nextvalue INT; ' -- next value for the tracking_id sequence
             + 'SET @nextvalue = next value for {sequence_name}; '
             + ' DECLARE @table_id TABLE ( { ', '.join( [ f"{column.name} {column.data_type}" for column in primary_key_columns ] ) } ); '
             + ' INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM {table_queryname} WHERE tracking_id IS NULL;'
-            + ' WHILE SELECT 1 FROM @table_id '
+            + ' WHILE EXISTS(SELECT 1 FROM @table_id) '
             + ' BEGIN '
                 + ' UPDATE {table_queryname} SET tracking_id = ''{server_id}'' +  '
                 + ' FORMAT( CURRENT_TIMESTAMP, ''yyyyMMddHHmmss'' ) + '
@@ -752,7 +766,7 @@ def insert_update_delete_trigger_query( table, trigger_name, sequence_name, prim
                     + ' BEGIN '
                         + ' IF EXISTS (SELECT 0 FROM inserted) '  -- insert or update
                         + ' BEGIN '
-                            + 'IF EXISTS (SELECT DISTINCT { ', '.join( primary_key_column_names ) if not tracking_id_exists else 'tracking_id' } FROM inserted) AND EXISTS (SELECT 0 FROM deleted) '
+                            + 'IF EXISTS (SELECT DISTINCT { ', '.join( primary_key_column_names ) } FROM inserted) AND EXISTS (SELECT 0 FROM deleted) '
                             + 'BEGIN '
                                 + ' UPDATE {table.get_queryname()} SET last_updated=CURRENT_TIMESTAMP WHERE '
                                 + ' { ', '.join( primary_key_columns ) if not tracking_id_exists else 'tracking_id' } IN (SELECT DISTINCT { ', '.join( primary_key_column_names ) if not tracking_id_exists else 'tracking_id' } FROM inserted); '
@@ -762,18 +776,31 @@ def insert_update_delete_trigger_query( table, trigger_name, sequence_name, prim
                             + 'BEGIN '
                                 + ' DECLARE @table_id TABLE ( {', '.join( [ f"{get_column_type_and_precision(column)}" for column in primary_key_columns ] )} );'
                                 + ' DECLARE @now_datetime DATETIME2;'
-                                + ' SET @now_datetime = CURRENT_TIMESTAMP;'
                                 + ' DECLARE @nextvalue INT;'
-                                + ' SET @nextvalue = next value for {sequence_name}; '
+                                + ' DECLARE @offset INT; '
 
-                                + 'INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM inserted WHERE tracking_id IS NULL;'
+                                + ' SET @nextvalue = next value for {sequence_name}; '
+                                + ' SET @offset = 0;'
+
+                                + 'INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM inserted WHERE tracking_id IS NULL '
+                                + ' ORDER BY { ', '.join( [ column.name for column in primary_key_columns ] ) } OFFSET @offset ROWS ' 
+                                + ' FETCH NEXT 1 ROWS ONLY;'
+
                                 + ' WHILE EXISTS(SELECT 1 FROM @table_id) '
                                 + ' BEGIN '
+                                    + ' SET @now_datetime = CURRENT_TIMESTAMP;'
                                     + ' UPDATE {table.get_queryname()} SET tracking_id = ''{SERVER_ID}'' +  FORMAT( @now_datetime, ''yyyyMMddHHmmss'' ) + '
-                                    + ' RIGHT ( ''00'' + CAST( @nextvalue AS varchar(2) ), 2 ), last_updated = @now_datetime;'
+                                    + ' RIGHT ( ''00'' + CAST( @nextvalue AS varchar(2) ), 2 ), last_updated = @now_datetime '
+                                    + ' WHERE { " AND ".join( [ f"{column} IN (SELECT {column} FROM @table_id)" for column in primary_key_column_names ] ) }'
 
                                     + ' DELETE FROM @table_id;'
-                                    + ' INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM {table.get_queryname()} WHERE tracking_id IS NULL;'
+                                    
+                                  f  + ' SET @offset = @offset + 1; '
+
+                                    + 'INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM inserted WHERE tracking_id IS NULL '
+                                    + ' ORDER BY { ', '.join( [ column.name for column in primary_key_columns ] ) } OFFSET @offset ROWS ' 
+                                    + ' FETCH NEXT 1 ROWS ONLY; '
+                                
                                     + ' SET @nextvalue = next value for { sequence_name }; '
                                 + ' END'
 
@@ -901,18 +928,20 @@ def initialize_database( database_record ):
         
         server_id = SERVER_ID
 
+        success_flag = True
+
         for table in ferdolt_models.Table.objects.filter( Q(schema__database=database_record) & ~Q(name__icontains='_deletion') ):
             tracking_id_exists = False
             primary_key_columns = table.column_set.filter(columnconstraint__is_primary_key=True).distinct()
 
             # check if there is a tracking_id column in the table
-            if not table.column_set.filter(name__iexact="tracking_id").exists():
+            if 1:
                 if primary_key_columns.count() == 1:
                     # create and populate tracking_id column only if there is a single or no primary key column
                     try:
                         logging.info(f"Adding the tracking_id column to the {table.get_queryname()} table in the {database_record.__str__()} database")
                         print(f"Adding the tracking_id column to the {table.get_queryname()} table in the {database_record.__str__()} database")
-                        query = f"ALTER TABLE {table.get_queryname()} ADD tracking_id VARCHAR({len(server_id) + 14 + 5})"
+                        query = get_create_tracking_id_column_query(table, **dbms_booleans)
 
                         cursor.execute(query)
                         try:
@@ -933,9 +962,10 @@ def initialize_database( database_record ):
                                 logging.info("tracking_id column populated successfully")
                                 print("tracking_id column populated successfully")
                             except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
-                                logging.error(f"Error setting tracking_id where null in the {table.get_queryname()} table in the {database_record.name.lower()} database")
-                                print(f"Error setting tracking_id where null in the {table.get_queryname()} table in the {database_record.name.lower()} database")
+                                logging.error(f"Error setting tracking_id where null in the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
+                                print(f"Error setting tracking_id where null in the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
                                 logging.error(f"Query to set the tracking_id where null: {query}")
+                                success_flag = False
                                 connection.rollback()
                                 raise e
 
@@ -945,11 +975,13 @@ def initialize_database( database_record ):
                             logging.error(f"Error creating tracking_id_sequence")
                             print(f"Error creating tracking_id_sequence")
                             connection.rollback()
+                            success_flag = False
                             raise e                        
 
                     except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
-                        logging.error(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database")
-                        print(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database")
+                        logging.error(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
+                        logging.error(f"Query to add the tracking_id column: {str(e)}")
+                        success_flag = False
                         connection.rollback()
                         raise e
                 elif primary_key_columns.count() > 1:
@@ -957,7 +989,7 @@ def initialize_database( database_record ):
                     try:
                         logging.info(f"Adding the tracking_id column to the {table.get_queryname()} table in the {database_record.__str__()} database")
                         print(f"Adding the tracking_id column to the {table.get_queryname()} table in the {database_record.__str__()} database")
-                        query = f"ALTER TABLE {table.get_queryname()} ADD tracking_id VARCHAR({len(server_id) + 14 + 2}) UNIQUE"
+                        query = get_create_tracking_id_column_query(table, **dbms_booleans)
 
                         cursor.execute(query)
 
@@ -965,7 +997,9 @@ def initialize_database( database_record ):
                             logging.info(f"Creating the tracking_id sequence in the {database_record.__str__()} database")
                             print(f"Creating the tracking_id sequence in the {database_record.__str__()} database")
 
-                            cursor.execute( create_sequence_query(f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence") )
+                            create_sequence_query_string = create_sequence_query(f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence", **dbms_booleans)
+
+                            cursor.execute( create_sequence_query_string )
 
                             set_tracking_id_where_null_query_string = set_tracking_id_where_null_query_multiple_primary_keys(
                                 table, primary_key_columns, server_id, 
@@ -981,23 +1015,29 @@ def initialize_database( database_record ):
                                 cursor.execute( set_tracking_id_where_null_query_string )
                         
                             except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
-                                logging.error(f"Error setting the values of the tracking_id column in the {table.get_queryname()} table in the {database_record.name.lower()} database")
-                                print(f"Error setting the values of the tracking_id column in the {table.get_queryname()} table in the {database_record.name.lower()} database")
+                                logging.error(f"Error setting the values of the tracking_id column in the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
+                                logging.error(f"Query to set the values of the tracking_id column: {set_tracking_id_where_null_query_string}")
+                                success_flag = False
                                 connection.rollback()
+                                raise e
                         
                         except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
-                            logging.error(f"Error creating the tracking_id sequence in the {database_record.name.lower()} database")
-                            print(f"Error creating the tracking_id sequence in the {database_record.name.lower()} database")
+                            logging.error(f"Error creating the tracking_id sequence in the {database_record.name.lower()} database. Error: {str(e)}")
+                            logging.error(f"Query to create the sequence: {create_sequence_query_string}")
+                            success_flag = False
                             connection.rollback()        
+                            raise e
 
                     except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
-                        logging.error(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database")
-                        print(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database")
+                        logging.error(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
+                        logging.error(f"Query to create the tracking_id column: {str(query)}")
+                        success_flag = False
                         connection.rollback()
+                        raise e
                 else:
                     raise InvalidDatabaseStructure(f"The {table.__str__()} table in the {database_record.__str__()} does not have a primary key column")
 
-            if not table.column_set.filter(name__iexact='last_updated').exists():
+            if 1:
                 logging.info(f"""Adding the last_updated column to the {table.get_queryname()} table in the {database_record.__str__()} database""")
                 print(f"""Adding the last_updated column to the {table.get_queryname()} table in the {database_record.__str__()} database""")
                 query = create_datetime_column_with_default_now_query(table, **dbms_booleans)
@@ -1009,6 +1049,7 @@ def initialize_database( database_record ):
                     logging.error(f"Error adding last_updated column to the {table.get_queryname()} table in the {database_record.name.lower()} database")
                     print(f"Error adding last_updated column to the {table.get_queryname()} table in the {database_record.name.lower()} database")
                     connection.rollback()
+                    success_flag = False
                     raise e
 
             # create and record the deletion table in the local dbms
@@ -1047,18 +1088,19 @@ def initialize_database( database_record ):
                 
                 except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
                     logging.error(f"Error creating the insert, update delete trigger for {table.get_queryname()} table in the {database_record.name.lower()}. Error: {str(e)}")
-                    print(f"Error creating the insert, update, delete trigger for {table.get_queryname()} table in the {database_record.name.lower()}. Error: {str(e)}")
                     connection.rollback()
+                    success_flag = False
                     raise e
 
             except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
                 logging.error(f"Error creating deletion table for {table.get_queryname()} table in the {database_record.name.lower()}")
                 print(f"Error creating deletion table for {table.get_queryname()} table in the {database_record.name.lower()}")
                 connection.rollback()
+                success_flag = False
                 raise e
 
-            # create insert, update, delete trigger
-            trigger_name = f"{table.schema.name}_{table.name}_insert_update_delete_trigger"
+        if success_flag:
+            connection.commit()
 
     except InvalidDatabaseConnectionParameters as e:
         raise e

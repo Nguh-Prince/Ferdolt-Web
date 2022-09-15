@@ -20,4 +20,5 @@ urlpatterns = [
     path("synchronizations/", views.synchronizations, name='synchronizations'),
     path("not_found/", views.not_found, name="not_found"),
     path("pdf/", views.pdf, name='pdf'),
+    path("login/", views.login_view, name='login'),
 ]

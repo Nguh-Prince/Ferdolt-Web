@@ -90,15 +90,21 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         methods=["POST"], detail=True
     )
     def initialize(self, request, *args, **kwargs):
-        db = self.get_object()
+        db: models.Database = self.get_object()
 
         try:
             initialize_database(db)
+            db.is_initialized = True
+            db.save()
         except InvalidDatabaseStructure as e:
             logging.error(f"InvalidDatabaseStructure error raised when initializeing {db.__str__()}")
             return Response(data={'message': _("The target database has one or more target tables without primary key fields. Please add them and try again")}, status=status.HTTP_400_BAD_REQUEST)
         except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
-            return Response( data={'message': _("An error occured when trying to initialize the %(database)s database" % {'database': db.__str__()})} )
+            return Response( data={'message': _("An error occured when trying to initialize the %(database)s database" % {'database': db.__str__()})}, status=status.HTTP_500_INTERNAL_SERVER_ERROR )
+        except InvalidDatabaseConnectionParameters as e:
+            db.provides_successful_connection = False
+            db.save()
+            return Response( data={'message': _("We could not connect to the %(database)s database. Please ensure that your server is running and your credentials are correct" % {'database': db.__str__()})} )
 
         return Response(data={'message': _("The %(database)s was initialized successfully." % {'database': db.__str__()})})
     @action(
@@ -142,12 +148,12 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                             synchronize_database(connection, database, dictionary, 
                                             temporary_tables_created=temporary_tables_created)
                                             time_applied = timezone.now()
-                                            synchronization.time_applied = time_applied
-                                            synchronization.is_applied = True
+                                            # synchronization.time_applied = time_applied
+                                            # synchronization.is_applied = True
 
-                                            synchronization.save()
+                                            # synchronization.save()
                                             
-                                            synchronizations_applied.append(synchronization.extraction)
+                                            # synchronizations_applied.append(synchronization.extraction)
                                         except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
                                             logging.error(f"[In ferdolt.views.SynchronizationViewSet.synchronize]. Error synchronizing the database, error: {str(e)}")
                                             unapplied_synchronizations.append({
