@@ -87,6 +87,22 @@ class DatabaseSerializer(serializers.ModelSerializer):
         data = encrypt(data)[1]
         return data
 
+    def validate(self, attrs):
+        query = Database.objects.filter(name=attrs['name'])
+
+        clear_host = decrypt(attrs['host'])[1]
+        clear_port = decrypt(attrs['port'])[1]
+
+        for database in query:
+            if (database.get_host == clear_host 
+                and database.get_port == clear_port 
+            ):
+                raise serializers.ValidationError(_("A database already exists with the name %(name)s running on %(host)s:%(port)s" % 
+                    {
+                        'name': attrs['name'], 'host': clear_host, 'port': clear_port
+                    }
+                ))
+
     def create(self, validated_data) -> models.Database:
         version = validated_data.pop("dbms_version")
 

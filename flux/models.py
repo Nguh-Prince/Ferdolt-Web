@@ -55,12 +55,21 @@ class Extraction(models.Model):
     # i.e. SELECT * FROM table WHERE last_updated > start_time
     start_time = models.DateTimeField(null=True)
 
+    # this time is used to query the target tables 
+    # i.e. SELECT * FROM table WHERE last_updated < end_time
+    end_time = models.DateTimeField(null=True)
+
 class ExtractionTargetDatabase(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE)
     is_applied = models.BooleanField(default=False)
     time_applied = models.DateTimeField(null=True)
     history = HistoricalRecords()
+
+class ExtractionSynchronizationErrors(models.Model):
+    time_recorded = models.DateTimeField(auto_now_add=True)
+    target = models.ForeignKey(ExtractionTargetDatabase, on_delete=models.CASCADE)
+    error_message = models.TextField()
 
 class ExtractionSourceDatabase(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)

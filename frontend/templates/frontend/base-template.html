@@ -5,7 +5,7 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>{% block title %}DoDb | {% trans 'Dashboard' %}{% endblock %}</title>
+    <title>{% block title %}DoDB | {% trans 'Dashboard' %}{% endblock %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta content="Ferdolt Web" name="description" />
     <meta content="" name="author" />
@@ -36,6 +36,15 @@
 
         .cd-accordion {
             background-color: white;
+        }
+
+        .cd-accordion__label {
+            background-color: white;
+            color: var(--cd-color-1);
+        }
+
+        .cd-accordion__label:hover {
+            color: white;
         }
 
         #messages.active {
@@ -118,26 +127,6 @@
                                     class="align-self-center menu-icon" data-feather="file"></i>{% trans "File Manager" %}</a></li>
                     </ul>
                 </li>
-
-                <li>
-                    <a href="javascript: void(0);"><i data-feather="lock"
-                            class="align-self-center menu-icon"></i><span>Authentication</span><span
-                            class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
-                    <ul class="nav-second-level" aria-expanded="false">
-                        <li class="nav-item"><a class="nav-link" href="auth-login.html"><i
-                                    class="ti-control-record"></i>Log in</a></li>
-                        <li class="nav-item"><a class="nav-link" href="auth-register.html"><i
-                                    class="ti-control-record"></i>Register</a></li>
-                        <li class="nav-item"><a class="nav-link" href="auth-recover-pw.html"><i
-                                    class="ti-control-record"></i>Recover Password</a></li>
-                        <li class="nav-item"><a class="nav-link" href="auth-lock-screen.html"><i
-                                    class="ti-control-record"></i>Lock Screen</a></li>
-                        <li class="nav-item"><a class="nav-link" href="auth-404.html"><i
-                                    class="ti-control-record"></i>Error 404</a></li>
-                        <li class="nav-item"><a class="nav-link" href="auth-500.html"><i
-                                    class="ti-control-record"></i>Error 500</a></li>
-                    </ul>
-                </li>
         </div>
     </div>
     <!-- end left-sidenav-->
@@ -152,11 +141,12 @@
                         <a class="nav-link dropdown-toggle arrow-none waves-light waves-effect"
                             data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="false"
                             aria-expanded="false">
-                            <i data-feather="search" class="topbar-icon"></i>
+                            <!-- <i data-feather="search" class="topbar-icon"></i> -->
                         </a>
 
                         <div class="dropdown-menu dropdown-menu-end dropdown-lg p-0">
                             <!-- Top Search Bar -->
+                            {% if 1 %}
                             <div class="app-search-topbar">
                                 <form action="#" method="get">
                                     <input type="search" name="search" class="from-control top-search mb-0"
@@ -164,9 +154,11 @@
                                     <button type="submit"><i class="ti-search"></i></button>
                                 </form>
                             </div>
+                            {% endif %}
                         </div>
                     </li>
 
+                    {% if notifications %}
                     <li class="dropdown notification-list">
                         <a class="nav-link dropdown-toggle arrow-none waves-light waves-effect"
                             data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="false"
@@ -203,9 +195,9 @@
                                     <small class="float-end text-muted ps-2">10 min ago</small>
                                     <div class="media">
                                         <!-- <div class="avatar-md bg-soft-primary">
-                                            <img src="assets/images/users/user-4.jpg" alt=""
-                                                class="thumb-sm rounded-circle">
-                                        </div> -->
+                                                <img src="assets/images/users/user-4.jpg" alt=""
+                                                    class="thumb-sm rounded-circle">
+                                            </div> -->
                                         <div class="media-body align-self-center ms-2 text-truncate">
                                             <h6 class="my-0 fw-normal text-dark">Meeting with designers</h6>
                                             <small class="text-muted mb-0">It is a long established fact that a
@@ -238,7 +230,7 @@
                                     <div class="media">
                                         <div class="avatar-md bg-soft-primary">
                                             <!-- <img src="assets/images/users/user-5.jpg" alt=""
-                                                class="thumb-sm rounded-circle"> -->
+                                                    class="thumb-sm rounded-circle"> -->
                                         </div>
                                         <div class="media-body align-self-center ms-2 text-truncate">
                                             <h6 class="my-0 fw-normal text-dark">Your order is placed</h6>
@@ -273,14 +265,19 @@
                             </a>
                         </div>
                     </li>
+                    {% endif %}
 
                     <li class="dropdown">
-                        <a class="nav-link dropdown-toggle waves-effect waves-light nav-user" data-bs-toggle="dropdown"
-                            href="#" role="button" aria-haspopup="false" aria-expanded="false">
-                            <span class="ms-1 nav-user-name hidden-sm">Nick</span>
-                            <!-- <img src="assets/images/users/user-5.jpg" alt="profile-user"
-                                class="rounded-circle thumb-xs" /> -->
-                        </a>
+                        <div class="d-flex flex-row align-items-center px-3">
+                            <a class="nav-link dropdown-toggle waves-effect waves-light nav-user"
+                                data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="false"
+                                aria-expanded="false">
+                                <span class="ms-1 nav-user-name hidden-sm">{{ request.user.username }}</span>
+                            </a>
+                            <a href="{% url 'frontend:logout' %}">
+                                <i class="text-danger" data-feather="log-out"></i>
+                            </a>
+                        </div>
                         <div class="dropdown-menu dropdown-menu-end">
                             <a class="dropdown-item" href="pages-profile.html"><i data-feather="user"
                                     class="align-self-center icon-xs icon-dual me-1"></i> Profile</a>
@@ -318,6 +315,8 @@
             {% endblock %}
         </div>
         <div class="page-content">
+            {% block tabs %}
+            {% endblock %}
             {% block page_content %}
 
             {% endblock %}

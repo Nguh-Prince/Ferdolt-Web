@@ -6,7 +6,9 @@
     .daterangepicker.ltr.show-ranges.opensleft {
         display: none;
     }
-    ul.cd-accordion, ul.cd-accordion__sub {
+
+    ul.cd-accordion,
+    ul.cd-accordion__sub {
         list-style-type: none;
     }
 </style>
@@ -79,7 +81,8 @@
                                     <p class="text-dark mb-0 fw-semibold">{% trans 'Extractions' %}</p>
                                     <h3 class="m-0">{{ extraction_count }}</h3>
                                     <p class="mb-0 text-truncate text-muted"><span class="text-success"><i
-                                                class="mdi mdi-trending-up"></i>{{today_extraction_count}}</span> {% trans 'Extractions Today' %}
+                                                class="mdi mdi-trending-up"></i>{{today_extraction_count}}</span> {%
+                                        trans 'Extractions Today' %}
                                     </p>
                                 </div>
                                 <div class="col-auto align-self-center">
@@ -124,7 +127,7 @@
                                 <div class="col">
                                     <p class="text-dark mb-0 fw-semibold">Data Extracted</p>
                                     <h3 class="m-0">{{ data_extracted.size }} {{ data_extracted.unit }}</h3>
-                                    <p class="mb-0 text-truncate text-muted"><span class="text-danger"><i
+                                    <p class="mb-0 text-truncate text-muted"><span class="text-orange"><i
                                                 class="mdi mdi-trending-down"></i>{{ data_extracted_today.size }} {{ data_extracted_today.unit }}</span> Extracted Today</p>
                                 </div>
                                 <div class="col-auto align-self-center">
@@ -175,7 +178,7 @@
                                 <a href="{% url 'frontend:databases' %}"
                                     class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown"
                                     aria-haspopup="true" aria-expanded="false">
-                                    All<i class="las la-angle-down ms-1"></i>
+                                    {% trans "All" %}<i class="las la-angle-down ms-1"></i>
                                 </a>
                             </div>
                         </div>
@@ -230,49 +233,73 @@
     }
 
     const overviewCtx = document.getElementById("overview").getContext('2d')
+    var overviewChart 
 
-    const data = {
-        labels: chartInfo['databases'],
-        datasets: [
-            {
-                label: "Nb. extractions",
-                data: chartInfo['number_of_extractions'],
-                borderColor: '#8bc7cf',
-                backgroundColor: '#8bc7cf'
-            },
-            {
-                label: 'Nb. synchronizations',
-                data: chartInfo['number_of_synchronizations'],
-                borderColor: '#ffe6b1',
-                backgroundColor: '#ffe6b1'
-            },
-            {
-                label: 'Data extracted (mb)',
-                data: chartInfo['data_extracted'],
-                borderColor: '#c3dd7',
-                backgroundColor: '#c3cdd7'
-            }
-        ]
-    }
+    $(document).ready(function () {
+        $.ajax({
+            type: "GET",
+            url: `http://${location.host}/get_stats/`,
+            success: function (data) {
+                console.log("Data gotten successfully from the backend")
+                console.log(data)
+                const chartInfo = data;
 
-    const config = {
-        type: 'bar',
-        data: data,
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'top',
-                },
-                title: {
-                    display: true,
-                    text: 'Chart.js Bar Chart'
+                console.log("The chartInfo is")
+                console.log(chartInfo)
+
+                const chartData = {
+                    labels: chartInfo['databases'],
+                    datasets: [
+                        {
+                            label: "Nb. extractions",
+                            data: chartInfo['number_of_extractions'],
+                            borderColor: '#8bc7cf',
+                            backgroundColor: '#8bc7cf'
+                        },
+                        {
+                            label: 'Nb. synchronizations',
+                            data: chartInfo['number_of_synchronizations'],
+                            borderColor: '#ffe6b1',
+                            backgroundColor: '#ffe6b1'
+                        },
+                        {
+                            label: 'Data extracted (mb)',
+                            data: chartInfo['data_extracted'],
+                            borderColor: '#c3dd7',
+                            backgroundColor: '#c3cdd7'
+                        }
+                    ]
                 }
-            }
-        },
-    };
 
-    const overviewChart = new Chart(overviewCtx, config)
+                console.log('The chart data is')
+                console.log(chartData)
+
+                const config = {
+                    type: 'bar',
+                    data: chartData,
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            title: {
+                                display: true,
+                                text: 'Chart.js Bar Chart'
+                            }
+                        }
+                    },
+                };
+
+                console.log(config)
+
+                overviewChart = new Chart(overviewCtx, config)
+            },
+            error: function (data) {
+
+            }
+        })
+    })
 
 </script>
 {% endblock %}

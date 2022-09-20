@@ -4,6 +4,7 @@ import random
 from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext as _
+from django.core.exceptions import ValidationError
 
 from simple_history.models import HistoricalRecords
 
@@ -42,7 +43,7 @@ class Database(models.Model):
     password = models.TextField()
     instance_name = models.CharField(max_length=100, null=True, blank=True)
     host = models.CharField(max_length=150, default="localhost")
-    port = models.CharField(default='1433', max_length=5)
+    port = models.TextField()
     time_added = models.DateTimeField(auto_now_add=True)
     history = HistoricalRecords()
     provides_successful_connection = models.BooleanField(default=False)
@@ -61,6 +62,16 @@ class Database(models.Model):
     def save(self, *args, **kwargs):
         self.name = self.name.lower()
         return super().save(*args, **kwargs)
+
+    def clean(self, *args, **kwargs):
+        # check if there are any other databases with the same name and host as this one
+        query = Database.objects.filter(Q(name=self.name) & Q(dbms_version=self.dbms_version) & ~Q(id=self.id))
+
+        for database in query:
+            if database.get_host == self.get_host and database.get_port == self.get_port:
+                raise ValidationError( _("There is already a database with the same name, host and port as this one") )
+        
+        return super().clean(*args, **kwargs)
     
     @property
     def get_password(self):
@@ -97,6 +108,15 @@ class DatabaseSchema(models.Model):
         self.name = self.name.lower()
         
         return super().save(*args, **kwargs)
+
+    @property
+    def has_normal_tables(self, *args, **kwargs):
+        return self.normal_tables.exists()
+
+    @property
+    def normal_tables(self, *args, **kwargs):
+        return self.table_set.filter( ~Q(id__in=Table.objects.filter(deletion_table__isnull=False)
+                                                             .values("deletion_table__id")) )
 
 class Table(models.Model):
     # validations

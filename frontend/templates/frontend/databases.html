@@ -1,7 +1,7 @@
 {% extends 'frontend/base-template.html' %}
 {% load i18n static %}
 
-{% block title %}DoDb | {% trans 'Databases' %}{% endblock %}
+{% block title %}DoDB | {% trans 'Databases' %}{% endblock %}
 
 {% block breadcrumbs %}
 
@@ -20,21 +20,43 @@
 
 {% block message_active %}active{% endblock %}
 {% block messages %}
-    {% if database and not connection %}
-        <div class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="toast-header">
-                <img src="..." class="rounded me-2" alt="">
-                <strong class="me-auto">Ferdolt</strong>
-                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"
-                onclick="toggleMessages()"
-                ></button>
-            </div>
-        
-            <div class="toast-body">
-                We are unable to connect to the {{ database.name }} database, please ensure that your database server is running and your credentials are correct
-            </div>
-        </div>
-    {% endif %}
+{% if database and not connection %}
+<div class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="toast-header">
+        <img src="..." class="rounded me-2" alt="">
+        <strong class="me-auto">DoDB</strong>
+        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"
+            onclick="toggleMessages()"></button>
+    </div>
+
+    <div class="toast-body">
+        {% blocktranslate with database.name as database_name %}
+        We were unable to connect to the {{ database_name }} database, please ensure that your database server is running
+        and your credentials are correct.
+        {% endblocktranslate %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block tabs %}
+{% if database %}
+<ul class="nav nav-tabs" role="tablist">
+    <li class="nav-item active" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#general" id="general-tab"
+            aria-current="page">{% trans "Tables" %}</button>
+    </li>
+    <li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#synchronizations" id="synchronizations-tab"
+            aria-current="page">{% trans "Synchronizations" %}</button>
+    </li>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#extractions" id="rewards-tab">{% trans "Extractions" %}</button>
+    </li>
+</ul>
+{% endif %}
 {% endblock %}
 
 {% block page_content %}
@@ -59,87 +81,158 @@
 
     </div>
     {% else %}
-    <div class="row">
-        <div class="col-sm-12">
-            <div class="page-title-box row">
-                <div class="col-md-6 row">
-                    {% if pending_synchronizations %}
-                        <div class="d-flex flex-column align-items-center">
-                            <div class="text-orange py-2">The {{ database.name }} database has {{ pending_synchronizations.count }} synchronizations pending</div>
-                            <button class="btn btn-outline-orange" onclick="synchronizeDatabase()">
-                                {% trans "Apply synchronizations" %}
-                            </button>
+    <div class="tab-content" id="my-tab-content">
+        <div class="tab-pane fade show active my-2" id="general" role="tabpanel" aria-labelledby="general-tab">
+            <div class="row {% if not pending_synchronizations %}d-none row-1{% endif %}">
+                <div class="col-sm-12">
+                    <div class="page-title-box row">
+                        <div class="col-md-6 row">
+                            {% if pending_synchronizations %}
+                            <div class="d-flex flex-column align-items-center">
+                                <div class="text-orange py-2">The {{ database.name }} database has {{ pending_synchronizations.count }} synchronizations pending</div>
+                                <button class="btn btn-outline-orange" onclick="synchronizeDatabase()">
+                                    {% trans "Apply synchronizations" %}
+                                </button>
+                            </div>
+                            {% endif %}
                         </div>
-                    {% endif %}
-                </div>
 
-                <div class="row col-md-6 justify-content-end">
-                    <div class="col-auto align-self-center d-none" id="action-buttons-container">
-                        <button class="btn btn-outline-orange btn-sm mx-2" id="delete-many"
-                            data-bs-target="#extract-from-database" data-bs-toggle="modal">
-                            <i data-feather="upload" style="width: 16; height: 16;"></i> {% trans 'Synchronize' %}
-                        </button>
+                        <div class="row col-md-6 justify-content-end">
+                            <div class="col-auto align-self-center d-none" id="action-buttons-container">
+                                <button class="btn btn-outline-orange btn-sm mx-2" id="delete-many"
+                                    data-bs-target="#extract-from-database" data-bs-toggle="modal">
+                                    <i data-feather="upload" style="width: 16; height: 16;"></i> {% trans 'Synchronize' %}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-    <!-- Create nested accordions for the schemas, tables and columns -->
-    <ul class="cd-accordion cd-accordion--animated margin-top-lg margin-bottom-lg">
-        {% for schema in database.databaseschema_set.all %}
-        <li class="cd-accordion__item cd-accordion__item--has-children">
-            <input type="checkbox" class="cd-accordion__input" name="{{ schema.name.lower }}-{{schema.id}}"
-                id="{{ schema.name.lower }}-{{schema.id}}" checked>
+            <!-- Create nested accordions for the schemas, tables and columns -->
+            <ul class="cd-accordion cd-accordion--animated margin-top-lg margin-bottom-lg">
+                {% for schema in database.databaseschema_set.all %}
+                {% if schema.normal_tables %}
+                <li class="cd-accordion__item cd-accordion__item--has-children schema">
+                    <input type="checkbox" class="cd-accordion__input" name="{{ schema.name.lower }}-{{schema.id}}"
+                        id="{{ schema.name.lower }}-{{schema.id}}" checked>
 
-            <label for="{{ schema.name.lower }}-{{schema.id}}"
-                class="cd-accordion__label cd-accordion__label--icon-folder">
-                <input type="checkbox" class="mx-2 select-all-tables schema-select"
-                    name="select-{{ schema.name.lower }}-{{schema.id}}" data-schema-id="{{ schema.id }}">
-                <span>{{ schema.name }}</span></label>
+                    <label for="{{ schema.name.lower }}-{{schema.id}}"
+                        class="cd-accordion__label cd-accordion__label--icon-folder">
+                        <input type="checkbox" class="mx-2 select-all-tables schema-select"
+                            name="select-{{ schema.name.lower }}-{{schema.id}}" data-schema-id="{{ schema.id }}">
+                        <span>{{ schema.name }}</span></label>
 
-            <ul class="cd-accordion__sub cd-accordion__sub-11">
-                {% for table in schema.table_set.all %}
-                <li class="cd-accordion__item cd-accordion__item--has-children">
-                    <input class="cd-accordion__input" type="checkbox" name="{{ table.name.lower }}-{{table.id}}"
-                        id="{{ table.name.lower }}-{{table.id}}">
-                    <label class="cd-accordion__label cd-accordion__label--icon-folder"
-                        for="{{ table.name.lower }}-{{table.id}}">
-                        <input type="checkbox" class="mx-2 select-table" data-table-id="{{ table.id }}"
-                            data-schema-id="{{ schema.id }}" name="select-{{ table.name.lower }}-{{table.id}}">
-                        <span>{{ table.name }}</span></label>
+                    <ul class="cd-accordion__sub cd-accordion__sub-11">
+                        {% for table in schema.normal_tables %}
+                        <li class="cd-accordion__item cd-accordion__item--has-children">
+                            <input class="cd-accordion__input" type="checkbox"
+                                name="{{ table.name.lower }}-{{table.id}}" id="{{ table.name.lower }}-{{table.id}}">
+                            <label class="cd-accordion__label cd-accordion__label--icon-folder"
+                                for="{{ table.name.lower }}-{{table.id}}">
+                                <input type="checkbox" class="mx-2 select-table" data-table-id="{{ table.id }}"
+                                    data-schema-id="{{ schema.id }}" name="select-{{ table.name.lower }}-{{table.id}}">
+                                <span>{{ table.name }}</span></label>
 
-                    <ul class="cd-accordion__sub cd-accordion__sub--l2">
-                        <li class="cd-accordion__item">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>{% trans "Column name" %}</th>
-                                        <th>{% trans "Data type" %}</th>
-                                        <th>{% trans "Character max." %}</th>
-                                        <th>{% trans "Datetime precision" %}</th>
-                                        <th>{% trans "Numeric precision" %}</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for column in table.column_set.all %}
-                                    <tr>
-                                        <td>{{ column.name }}</td>
-                                        <td>{{ column.data_type }}</td>
-                                        <td>{{ column.character_maximum_length }}</td>
-                                        <td>{{ column.datetime_precision }}</td>
-                                        <td>{{ column.numeric_precision }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                            <ul class="cd-accordion__sub cd-accordion__sub--l2">
+                                <li class="cd-accordion__item">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>{% trans "Column name" %}</th>
+                                                <th>{% trans "Data type" %}</th>
+                                                <th>{% trans "Character max." %}</th>
+                                                <th>{% trans "Datetime precision" %}</th>
+                                                <th>{% trans "Numeric precision" %}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for column in table.column_set.all %}
+                                            <tr>
+                                                <td>{{ column.name }}</td>
+                                                <td>{{ column.data_type }}</td>
+                                                <td>{{ column.character_maximum_length }}</td>
+                                                <td>{{ column.datetime_precision }}</td>
+                                                <td>{{ column.numeric_precision }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </li>
+                            </ul>
                         </li>
+                        {% endfor %}
                     </ul>
                 </li>
+                {% endif %}
                 {% endfor %}
             </ul>
-        </li>
-        {% endfor %}
-    </ul>
+        </div>
+
+        <div class="tab-pane fade show my-2" id="synchronizations" 
+        role="tabpanel" aria-labelledby="synchronizations-tab">
+            {% if synchronizations %}
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Time made</th>
+                        <th>File</th>
+                        <th>File size</th>
+                        <th>Is applied</th>
+                        <th></th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for synchronization in synchronizations %}
+                    <tr>
+                        <td>{{ synchronization.extraction.time_made }}</td>
+                        <td>{{ synchronization.extraction.file.file.url }}</td>
+                        <td>{{ synchronization.extraction.file.size }}</td>
+                        <td>{{ synchronization.is_applied }}</td>
+                        <td>
+                            {% if not synchronization.is_applied %}
+                                <button class="btn btn-outline-success">{% trans 'Apply' %}</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <span>{% trans "This database does not have any synchronizations" %}</span>
+            {% endif %}
+        </div>
+
+        <div class="tab-pane fade show my-2" id="extractions" 
+        role="tabpanel" aria-labelledby="extractions-tab">
+            {% if extractions %}
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Time made</th>
+                        <th>File</th>
+                        <th>File size</th>
+                        <th></th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for extraction in extractions %}
+                    <tr>
+                        <th>{{ extraction.extraction.time_made }}</th>
+                        <th><a href="{{ extraction.extraction.file.file.url }}">
+                            {{ extraction.extraction.file.file.name }}
+                        </a></th>
+                        <th>{{ extraction.extraction.file.size }}</th>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <span>{% trans "This database does not have any extractions" %}</span>
+            {% endif %}
+        </div>
+    </div>
     {% endif %}
 </div>
 {% endblock %}
@@ -217,9 +310,8 @@
 
             <div class="modal-body">
                 <div class="input-group mb-3">
-                    <input type="text" id="new-extraction-start-time-display" 
-                    class="form-control" readonly 
-                    placeholder="{% trans 'Extraction start time' %}">
+                    <input type="text" id="new-extraction-start-time-display" class="form-control" readonly
+                        placeholder="{% trans 'Extraction start time' %}">
                     <input type="datetime" id="new-extraction-start-time" class="d-none">
                     <div class="input-group-append">
                         <span class="input-group-text" id="empty-new-extraction-start-time">
@@ -452,11 +544,11 @@
     var NUMBER_OF_SELECTED_TABLES = 0;
     const DATABASE_ID = {{ database.id }}
 
-    $("#empty-new-extraction-start-time").click( () => {
+    $("#empty-new-extraction-start-time").click(() => {
         console.log("Clicked the bspc button")
         $('#new-extraction-start-time').val('')
         $('#new-extraction-start-time-display').val('')
-    } )
+    })
 
     function extractFromDatabase() {
         let schemas = [];
@@ -516,14 +608,14 @@
             },
             data: JSON.stringify(formData),
             contentType: "application/json",
-            success: function(data) {
+            success: function (data) {
                 displayMessage("Extraction completed successfully", ["alert", "alert-success", "alert-dismissible"])
                 $("#extract-from-database").modal('hide');
             },
-            error: function(data) {
+            error: function (data) {
                 console.log(data.status)
 
-                switch(data.status) {
+                switch (data.status) {
                     case 404:
                         displayMessage("Error in the url. Please contact the developer")
                         break;
@@ -542,12 +634,16 @@
             headers: {
                 "X-CSRFTOKEN": getCookie("csrftoken")
             },
-            success: function(data) {
-                displayMessage( data['message'], ["alert", "alert-dismissible", "alert-success"] )
+            success: function (data) {
+                displayMessage(data['message'], ["alert", "alert-dismissible", "alert-success"])
+
+                setTimeout( () => {
+                    location.reload()
+                }, 5000 )
             },
-            error: function(data) {
+            error: function (data) {
                 if ([400, 404, 403, 401].includes(data.status)) {
-                    switch(data.status) {
+                    switch (data.status) {
                         case 400:
                             displayMessage("Invalid request data " + data.responseJSON)
                             break;
@@ -603,8 +699,10 @@
 
         if (NUMBER_OF_SELECTED_TABLES > 0) {
             $("#action-buttons-container").removeClass('d-none')
+            $('.row-1').removeClass('d-none')
         } else {
             $("#action-buttons-container").addClass('d-none')
+            $('.row-1').addClass('d-none')
         }
     })
 
@@ -626,8 +724,10 @@
 
         if (NUMBER_OF_SELECTED_TABLES > 0) {
             $("#action-buttons-container").removeClass('d-none')
+            $('.row-1').removeClass('d-none')
         } else {
             $("#action-buttons-container").addClass('d-none')
+            $('.row-1').addClass('d-none')
         }
     })
 </script>
