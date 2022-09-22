@@ -31,9 +31,10 @@
                 <thead>
                     <tr>
                         <th>{% trans "Date & time" %}</th>
+                        <th>{% trans "Start time" %}</th>
                         <th>{% trans "File" %}</th>
                         <th>{% trans "File size (bytes)" %}</th>
-                        <th>{% trans "Databases" %}</th>
+                        <th>{% trans "Source" %}</th>
                     </tr>
                 </thead>
 
@@ -41,16 +42,13 @@
                     {% for extraction in extractions %}
                     <tr>
                         <td>{{ extraction.time_made }}</td>
+                        <td>{{ extraction.start_time }}</td>
                         <td>
                             <a target="_blank" href="{{ extraction.file.file.url }}">{{ extraction.file.file.name }}</a>
                         </td>
                         <td>{{ extraction.file.file.size }}</td>
                         <td>
-                            <ul>
-                                {% for database in extraction.extractiondatabase_set.all %}
-                                <li>{{ database.database.name }} on {{ database.database.host }}:{{ database.database.port }}</li>
-                                {% endfor %}
-                            </ul>
+                            {{ extraction.extractionsourcedatabase_set.first }} on {{ extraction.extractionsourcedatabase_set.first.database.clear_host }}:{{ extraction.extractionsourcedatabase_set.first.database.clear_port }}
                         </td>
                     </tr>
                     {% endfor %}

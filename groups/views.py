@@ -21,6 +21,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from common.permissions import IsStaff
+from common.responses import get_error_response
 
 from common.viewsets import MultipleSerializerViewSet
 from core.functions import custom_converter, get_create_temporary_table_query, get_database_connection, get_dbms_booleans, get_temporary_table_name, synchronize_database
@@ -44,7 +45,9 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         'create': serializers.GroupCreationSerializer,
         'extract': serializers.ExtractFromGroupSerializer,
         'link_columns': serializers.LinkColumnsToGroupColumnsSerializer,
+        'list': serializers.GroupDisplaySerializer,
         'retrieve': serializers.GroupDetailSerializer,
+        'synchronization_group': serializers.SynchronizationGroupSerializer
     }
 
     def get_queryset(self):
@@ -258,8 +261,6 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                         for group_table_name in dictionary.keys():
                             try:
                                 group_table = group.tables.get( name__iexact=group_table_name )
-                                breakpoint()
-
                                 # getting the database tables associated to this group_table
                                 group_table_tables = group_table.grouptabletable_set.all()
                                 group_table_columns = [ group_column for group_column in group_table.columns.all() if group_column.name.lower() in dictionary[group_table_name]['rows'][0] ]
@@ -482,3 +483,103 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         serializer = serializers.GroupColumnColumnSerializer( created_group_column_columns, many=True )
 
         return Response( data=serializer.data )
+
+    @action(
+        methods=['POST'],
+        detail=False
+    )
+    def synchronization_group(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        validated_data = serializer.validated_data
+
+        group = models.Group.objects.create()
+        logging.info("Created the group successfully. Adding tables to the group now")
+
+        group_databases = []
+        group_tables_names = set([])
+
+        if validated_data['type'] == 'full':
+            source_databases_set = set(validated_data['sources'])
+            participant_databases_set = set(validated_data['participants'])
+
+            all_databases = source_databases_set.union(participant_databases_set)
+
+            for database in all_databases:
+                if database in source_databases_set:
+                    logging.info(f"Creating a read/write database using {database}")
+                    group_database = models.GroupDatabase.objects.create(group=group, database=database, can_write=True, can_read=True)
+                else:
+                    logging.info(f"Creating a read-only database using {database}")
+                    group_database = models.GroupDatabase.objects.create(group=group, database=database, can_read=True)
+                
+                group_databases.append(group_database)
+
+            for table in ferdolt_models.Table.objects.filter(schema__database__in=source_databases_set):
+                group_table_name = f"{table.schema.name}__{table.name}"
+                table_columns = table.column_set.all()
+                table_database = table.schema.database
+                
+                # create the group tables based on the tables in the source databases
+                if group_table_name not in group_tables_names and table_database in source_databases_set:
+                    logging.info(f"Creating a new group table with name {group_table_name}")
+
+                    group_table = models.GroupTable.objects.create(group=group, name=group_table_name)
+                    models.GroupTableTable.objects.create(group_table=group_table, table=table)
+                    group_tables_names.add(group_table_name)
+                    logging.info(f"Linking the {table} table to the {group_table} table")
+                else:
+                    try:
+                        group_table = models.GroupTable.objects.get(name=group_table_name, group=group)
+                        models.GroupTableTable.objects.create(group_table=group_table, table=table)
+                        logging.info(f"Linking the {table} table to the {group_table} table")
+                    except models.Group.DoesNotExist as e:
+                        logging.error(f"Error when creating full synchronization group. Error: {str(e)}")
+
+                        if table_database in source_databases_set:
+                            return get_error_response()
+                
+                # link the database table to the group table
+                models.GroupTableTable.objects.create(group_table=group_table, table=table)
+
+                # query to get the columns that are in this table but not in the group
+                table_columns_query = table_columns.filter( ~Q(name__in=group_table.columns.values("name")) )
+
+                for column in table_columns:
+                    if column in table_columns_query:
+                        # create a new groupcolumn
+                        group_column = models.GroupColumn.objects.create(name=column.name, group_table=group_table, 
+                        data_type=column.data_type, is_nullable=column.is_nullable)
+                    else:
+                        try:
+                            group_column = models.GroupColumn.objects.get(name=column.name, group_table=group_table)
+                        except models.GroupColumn.DoesNotExist as e:
+                            logging.error(f"Error when creating full synchronization group. Error: {str(e)}")
+                            return get_error_response()
+
+                    models.GroupColumnColumn.objects.create(group_column=group_column, column=column)
+
+            # link the table
+            for table in ferdolt_models.Table.objects.filter(schema__database__in=participant_databases_set - source_databases_set):
+                group_table_name = f"{table.schema.name}__{table.name}"
+                table_columns = table.column_set.all()
+                table_database = table.schema.database
+
+                if group_table_name in group_tables_names:
+                    group_table = models.GroupTable.objects.get(name=group_table_name, group=group)
+
+                    for group_column in group_table.columns:
+                        column_query = table_columns.filter(name=group_column.name)
+
+                        if column_query.exists():
+                            models.GroupColumnColumn.objects.create(
+                                group_column=group_column, column=column_query.first()
+                            )
+                        else:
+                            # create column
+                            pass
+            
+            return Response( serializers.GroupSerializer(group).data, status=status.HTTP_201_CREATED)
+        else:
+            pass

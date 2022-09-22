@@ -345,6 +345,50 @@ class ExtractionSerializer(serializers.ModelSerializer):
                 else:
                     raise serializers.ValidationError( _("No database exists with id %(id)s" % {'id': id}) )
 
+            # for database in databases:
+            #     database_record = database['database']
+
+            #     if database_record:
+            #         database_dictionary = results.setdefault(database_record.name, {})
+
+            #         connection get_database_connection(database_record)
+
+            #         if connection:
+            #             cursor = connection.cursor()
+            #             database_records.append(database)
+
+            #             schemas = None
+            #             schemas_key = 'extractionsourcedatabaseschema_set'
+
+            #             if schemas_key in database and database[schemas_key]:
+            #                 schemas = database[schemas_key]
+
+            #             for schema in schemas:
+            #                 tables = None
+            #                 _schema = schema['schema']
+
+            #                 schema_tables_key = 'extractionsourcetable_set'
+
+            #                 if schema_tables_key in schema and schema[schema_tables_key]:
+            #                     tables = schema[schema_tables_key]
+
+            #                     for _table in tables:
+            #                         table: ferdolt_models.Table = _table['table']
+            #                         deletion_table = table.deletion_table
+
+            #                         table_query_name = table.get_queryname()
+            #                         deletion_table_query_name = deletion_table.get_queryname()
+
+            #                         schema_dictionary = database_dictionary.setdefault(_schema.name, {})
+            #                         table_dictionary = schema_dictionary.setdefault( table.name, {} )
+
+            #                         table_rows = table_dictionary.setdefault( "rows", [] )
+            #                         table_deleted_rows = table_dictionary.setdefault("deletions", [])
+
+            #                         time_field = table.column_set.filter( Q(name='last_updated') | Q(name="deletion_time") )
+            #                         deletion_time_field = "deletion_time"
+
+            # get the last extraction that included this table
             if database_records:
                 base_filename = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}" )
 

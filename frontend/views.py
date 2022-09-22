@@ -5,16 +5,19 @@ import re
 import urllib
 
 from django.contrib.auth import login, logout
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
 from django.db.models import Count, F, Max, Sum
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
-from reportlab.pdfgen import canvas
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from ferdolt import models as ferdolt_models
 from flux import models as flux_models
@@ -48,6 +51,11 @@ def get_file_size_and_unit(size, number_of_decimal_places=2):
 ################################################################################################
 
 def login_view(request):
+    next = ""
+
+    if request.GET:
+        next = request.GET['next']
+
     if request.method == "POST":
         username = request.POST["username"]
         password = request.POST["password"]
@@ -97,13 +105,21 @@ def login_view(request):
         # to prevent javascript from character escaping the timezone
         tz = urllib.parse.quote_plus("Africa/Douala")
 
-        response = redirect("frontend:index")
+        if next == "":
+            response = redirect("frontend:index")
+        else:
+            response = HttpResponseRedirect(next)
 
         return response
     else:
-        return render(request, "frontend/login.html")
+        return render(request, "frontend/login.html", context={'next': next})
 
+@login_required
+def logout_view(request):
+    logout(request)
+    return redirect("frontend:login")
 
+@login_required
 def index(request):
     now = timezone.now()
     # adding this delta to the current time will give us midnight of today
@@ -191,18 +207,55 @@ def index(request):
 
     return render(request, "frontend/index.html", context=context)
 
-def pdf(request):
-    buffer = io.BytesIO()
+@api_view(['GET'])
+@permission_classes([ IsAuthenticated ])
+def get_stats(request):
+    dictionary = {
+        "databases": [],
+        "number_of_extractions": [],
+        "data_extracted": [],
+        "number_of_synchronizations": []
+    }
 
-    p = canvas.Canvas(buffer)
+    databases = (
+        ferdolt_models.Database.objects.all()
+        .order_by('-time_added').annotate(Count('id'))
+    )
 
-    p.drawString(100, 100, "Hello world.")
+    all_extractions = flux_models.Extraction.objects.filter(
+        extractionsourcedatabase__database__id__in=databases.values('id')
+    )
+    max_total_extraction_size = (all_extractions.values("extractionsourcedatabase__database__id")
+        .annotate(size=Sum("file__size")).aggregate(Max("size"))
+    )['size__max']
+    size_unit = get_file_size_and_unit(max_total_extraction_size)
 
-    p.showPage()
-    p.save()
+    for database in databases:
+        dictionary["databases"].append(database.name)
+        extractions = flux_models.ExtractionSourceDatabase.objects.filter(database=database)
 
-    return FileResponse( buffer, as_attachment=True, filename='hello.pdf' )
+        number_of_extractions = (
+            extractions.aggregate(extraction_count=Coalesce(Count('id'), 0))
+        )
+        
+        number_of_synchronizations = (
+            flux_models.ExtractionTargetDatabase.objects.filter(database=database)
+            .aggregate(synchronization_count=Coalesce(Count('id'), 0))
+        )
 
+        extraction_file_size = (
+            round(extractions.aggregate( size=Coalesce(Sum('extraction__file__size'), 0.0) )['size'] / size_unit[2], 2 )
+        )
+
+        dictionary['number_of_extractions'].append(number_of_extractions['extraction_count'])
+        dictionary['number_of_synchronizations'].append(number_of_synchronizations['synchronization_count'])
+        dictionary['data_extracted'].append( extraction_file_size )
+
+    unit_size = get_file_size_and_unit(max_total_extraction_size)
+
+    return Response(data=dictionary)
+
+@login_required
 def databases(request, id: int=None):
     database = None
     databases = ferdolt_models.Database.objects.all()
@@ -217,14 +270,23 @@ def databases(request, id: int=None):
         else:
             # try to connect to the database
             database: ferdolt_models.Database = query.first()
-            pending_synchronizations = flux_models.ExtractionTargetDatabase.objects.filter(
-                database=database, is_applied=False
-            )
+
+            database_synchronizations = flux_models.ExtractionTargetDatabase.objects.filter(
+                database=database
+            ) 
+            pending_synchronizations = database_synchronizations.filter(is_applied=False)
+
+            extractions = flux_models.ExtractionSourceDatabase.objects.filter(
+                database=database
+            ).distinct()
+
             connection = get_database_connection(database)
 
             context['database'] = database
             context['pending_synchronizations'] = pending_synchronizations
             context['connection'] = connection
+            context['synchronizations'] = database_synchronizations
+            context['extractions'] = extractions
 
             databases = databases.filter( dbms_version=database.dbms_version )
 
@@ -233,9 +295,11 @@ def databases(request, id: int=None):
 def not_found(request):
     return render(request, "frontend/auth-404.html")
 
+@login_required
 def schemas(request):
     return render(request, "frontend/schemas.html")
 
+@login_required
 def tables(request, id: int=None):
     context = {}
     if not id:
@@ -253,12 +317,15 @@ def tables(request, id: int=None):
 
     return render(request, "frontend/tables.html", context=context)
 
+@login_required
 def columns(request):
     return render(request, "frontend/columns.html")
 
+@login_required
 def file_manager(request):
     return render(request, "frontend/file_manager.html")
 
+@login_required
 def servers(request, id: int=None):
     if not id:
         servers = ferdolt_models.Server.objects.all()
@@ -275,11 +342,14 @@ def servers(request, id: int=None):
 
         return render(request, "frontend/servers.html", context={'server': server})
 
+@login_required
 def groups(request, id: int=None):
     return render(request, "frontend/groups.html", context={'groups': groups_models.Group.objects.all()})
 
+@login_required
 def extractions(request):
-    return render(request, "frontend/extractions.html", context={'extractions': flux_models.Extraction.objects.all(), 'databases': ferdolt_models.Database.objects.all()})
+    return render(request, "frontend/extractions.html", context={'extractions': flux_models.Extraction.objects.all().order_by('-id'), 'databases': ferdolt_models.Database.objects.all()})
 
+@login_required
 def synchronizations(request):
     return render(request, "frontend/synchronizations.html", context={'synchronizations': flux_models.Synchronization.objects.all()})

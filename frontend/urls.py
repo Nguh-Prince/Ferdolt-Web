@@ -19,6 +19,7 @@ urlpatterns = [
     path("servers/<int:id>", views.servers, name='server-detail'),
     path("synchronizations/", views.synchronizations, name='synchronizations'),
     path("not_found/", views.not_found, name="not_found"),
-    path("pdf/", views.pdf, name='pdf'),
     path("login/", views.login_view, name='login'),
+    path("logout/", views.logout_view, name='logout'),
+    path('get_stats/', views.get_stats, name='get_stats'),
 ]

@@ -20,7 +20,7 @@ class GroupColumnSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.GroupColumn
-        fields = ( "id", "name", "is_required", "constraints", "columns" )
+        fields = ( "id", "name", "is_required", "data_type", "constraints", "columns" )
 
 class GroupTableSerializer(serializers.ModelSerializer):
     columns = GroupColumnSerializer(many=True)
@@ -151,11 +151,6 @@ class GroupDatabaseSynchronizationSerializer(serializers.ModelSerializer):
         fields = ("id", "group_database", "extraction", "is_applied", "time_applied")
 
 class GroupSerializer(serializers.ModelSerializer):
-    class GroupTableSimpleSerializer(serializers.ModelSerializer):
-        class Meta:
-            model = models.GroupTable
-            fields = ( "id", "name", "column_count" )
-
     class GroupDatabaseSimpleSerializer(serializers.ModelSerializer):
         class Meta:
             model = Database
@@ -166,6 +161,14 @@ class GroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Group
         fields = ( "id", "name", "tables", "databases" )
+
+class GroupDisplaySerializer(GroupSerializer):
+    class GroupTableSimpleSerializer(serializers.ModelSerializer):
+        class Meta:
+            model = models.GroupTable
+            fields = ( "id", "name", "column_count" )
+    
+    tables = GroupTableSerializer(many=True)    
 
 class LinkColumnsToGroupColumnsSerializer(serializers.Serializer):
     class LinkColumnToGroupColumnSerializer(serializers.Serializer):
@@ -204,3 +207,36 @@ class GroupColumnColumnSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.GroupColumnColumn
         fields = ( 'id', 'column', 'group_column' )
+
+class SynchronizationGroupSerializer(serializers.Serializer):
+    synchronization_type_choices = (
+        ("full", _("Full synchronization")),
+        # ("partial", _("Partial synchronization"))
+    )
+    type = serializers.ChoiceField(choices=synchronization_type_choices)
+    
+    # if this is not provided then all the databases can receive and provide data
+    sources = serializers.ListField(child=serializers.IntegerField(), required=False)
+    participants = serializers.ListField(child=serializers.IntegerField())
+
+    def validate_list_of_database_ids(self, list_of_database_ids):
+        temporary_list = []
+
+        for index, item in enumerate(list_of_database_ids):
+            try:
+                database = Database.objects.get(id=item)
+                temporary_list.append(database)
+            except Database.DoesNotExist as e:
+                raise serializers.ValidationError(
+                    _("Error on index %(index)d: No database exists with id %(id)d" % 
+                        {'index': index+1, 'id': item}
+                    )
+                )
+        return temporary_list
+
+    def validate_sources(self, data):
+        return self.validate_list_of_database_ids(data)
+
+    def validate_participants(self, data):
+        return self.validate_list_of_database_ids(data)
+

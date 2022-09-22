@@ -7,7 +7,7 @@
 <!-- Mirrored from mannatthemes.com/dastone/default/auth-login.html by HTTrack Website Copier/3.x [XR&CO'2014], Tue, 09 Aug 2022 15:13:08 GMT -->
 <head>
         <meta charset="utf-8" />
-        <title>Dastone - Admin & Dashboard Template</title>
+        <title>DoDB | Login</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <meta content="Premium Multipurpose Admin & Dashboard Template" name="description" />
         <meta content="" name="author" />
@@ -49,7 +49,7 @@
                                      <!-- Tab panes -->
                                     <div class="tab-content">
                                         <div class="tab-pane active p-3" id="LogIn_Tab" role="tabpanel">                                        
-                                            <form class="form-horizontal auth-form" action="" method="post">
+                                            <form class="form-horizontal auth-form" action="/login/?next={{ next }}" method="post">
                                                 {% csrf_token %}
                                                 <div class="form-group mb-2">
                                                     <label class="form-label" for="username">Username</label>
@@ -79,7 +79,7 @@
                     
                                                 <div class="form-group mb-0 row">
                                                     <div class="col-12">
-                                                        <button type="submit" class="btn btn-primary w-100 waves-effect waves-light" type="button">Log In <i class="fas fa-sign-in-alt ms-1"></i></button>
+                                                        <button type="submit" class="btn btn-primary w-100 waves-effect waves-light" type="button">Log In <i data-feather="log-in"></i></button>
                                                     </div><!--end col--> 
                                                 </div> <!--end form-group-->                           
                                             </form><!--end form-->

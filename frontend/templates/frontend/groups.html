@@ -11,12 +11,23 @@
                 <div class="col-auto align-self-center">
                     <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
                         data-bs-target="#new-group-modal">
-                        <i class="fas fa-plus me-2"></i>{% trans "Add database" %}
+                        <i class="fas fa-plus me-2"></i>{% trans "Add group" %}
                     </button>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
+<div class="row py-2" id="groups">
+    {% for group in groups %}
+        <div class="card mx-1" style="width: 18rem;" id="group-{{  group.id}}">
+            <div class="card-body">
+                <h5 class="card-title">{{ group.name }}</h5>
+                <button class="btn btn-primary my-3" data-bs-toggle="modal" data-bs-target="#group-detail-modal" onclick="displayGroup({{ group.id }})">{% trans "Detail" %}</button>
+            </div>
+        </div>
+    {% endfor %}
 </div>
 {% endblock %}
 
@@ -25,7 +36,7 @@
     <div class="modal-dialog modal-fullscreen">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">{% trans "New Database" %}</div>
+                <div class="modal-title">{% trans "New Group" %}</div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
@@ -142,6 +153,51 @@
         </div>
     </div>
 </div>
+
+<div class="modal" id="group-detail-modal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "Group detail" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="group-name-input" class="form-label">{% trans 'Name' %}</label>
+                    <input type="text" name="" id="group-name-input" class="form-control">
+                </div>
+
+                <div class="mb-3">
+                    <div class="accordion" id="group-accordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="group-table-heading">
+                                <button class="accordion-button"
+                                data-bs-target="#group-table-accordion-body" aria-expanded="true" aria-controls="group-table-accordion-body">
+                                    Tables
+                                </button>
+                            </h2>
+
+                            <div class="accordion-collapse collapse show" id="group-table-accordion-body" aria-labelledby="group-table-heading">
+                                <div class="accordion-body">
+                                    <div class="accordion py-2" id="group-tables-accordion">
+                                        
+                                    </div>
+
+                                    <div class="row justify-content-end">
+                                        <button style="width: 80px;" class="btn btn-outline-secondary" 
+                                        data-bs-target="#grouptable-modal" 
+                                        data-bs-toggle="modal">{% trans "Add table" %}</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -150,6 +206,33 @@
         name: '',
         databases: [],
         tables: []
+    }
+
+    $(document).ready(() => {
+        getGroups()
+    })
+
+    function getGroups() {
+        console.log("Getting the groups from the API")
+        $.ajax({
+            type: 'GET',
+            url: `http://${location.host}${API_URL}/ferdolt/groups/`,
+            success: function(data) {
+                for (let group of data) {
+                    state.groups[group.id] = group
+                }
+            },
+            error: function(data) {
+                switch(data.status) {
+                    case 500:
+                        displayMessage("Error connecting to the server, couldn't load groups.")
+                        break;
+                    default:
+                        displayMessage("Error getting the groups")
+                        break;
+                }
+            }
+        })
     }
 
     $(".accordion-button").click(function() {
@@ -297,15 +380,27 @@
     }
 
     function displayDraft() {
-        $("#new-group-name-input").val(DRAFT.name)
+        displayGroupObject(DRAFT, "#new-group-name-input", "#new-group-tables-accordion")
+    }
 
-        for (let table of DRAFT.tables) {
+    function displayGroup(groupID) {
+        let group = state.groups[groupID]
+
+        displayGroupObject(group, "#group-name-input", "#group-tables-accordion")
+    }
+
+    function displayGroupObject(object, nameInputSelector, tablesAccordionContainer) {
+        $(nameInputSelector).val(object.name)
+
+        $(tablesAccordionContainer).html('')
+
+        for (let table of object.tables) {
             let id = generateRandomId()
             let accordionHeaderId = `${id}_header`;
             let accordionBodyId = `${id}_body`;
 
             let tableAccordionItem = createElement('div', ['accordion-item'])
-            $("#new-group-tables-accordion").append(tableAccordionItem)
+            $(tablesAccordionContainer).append(tableAccordionItem)
 
             let tableAccordionHeader = createElement('h2', ['accordion-header'], 
                 {id: accordionHeaderId}
@@ -399,6 +494,7 @@
                 $(tableColumnTableBody).append(row)
             }
         }
+    
     }
 
     function submitNewGroup() {

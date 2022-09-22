@@ -148,12 +148,12 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                             synchronize_database(connection, database, dictionary, 
                                             temporary_tables_created=temporary_tables_created)
                                             time_applied = timezone.now()
-                                            # synchronization.time_applied = time_applied
-                                            # synchronization.is_applied = True
+                                            synchronization.time_applied = time_applied
+                                            synchronization.is_applied = True
 
-                                            # synchronization.save()
+                                            synchronization.save()
                                             
-                                            # synchronizations_applied.append(synchronization.extraction)
+                                            synchronizations_applied.append(synchronization.extraction)
                                         except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
                                             logging.error(f"[In ferdolt.views.SynchronizationViewSet.synchronize]. Error synchronizing the database, error: {str(e)}")
                                             unapplied_synchronizations.append({
@@ -214,6 +214,23 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         extractions = flux_models.Extraction.objects.filter(extractionsourcedatabase__database=database)
 
         return Response( data=ExtractionSerializer(extractions, many=True).data )
+
+    @action(
+        methods=['GET'], detail=True
+    )
+    def test_connection(self, request, *args, **kwargs):
+        database = self.get_object()
+
+        connection_successful = False
+
+        connection = get_database_connection(database)
+
+        if connection:
+            connection.close()
+            return Response( data={'message': _("Successfully connected to the database")} )
+
+        return Response( data={'message': _("Error connecting to the database. Please check that your server is running and your connection credentials are correct.")}, status=status.HTTP_400_BAD_REQUEST )
+        
 
 class DatabaseSchemaViewSet(viewsets.ModelViewSet):
     permission_classes = [ IsStaff ]

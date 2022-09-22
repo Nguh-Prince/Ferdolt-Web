@@ -1,4 +1,7 @@
 import logging
+from random import choices
+import string
+
 from cryptography import fernet
 
 from django.core.exceptions import ValidationError
@@ -35,16 +38,25 @@ def generate_unique_fernet_key():
 def generate_fernet_key():
     return encrypt( fernet.Fernet.generate_key() )[1]
 
+def generate_unique_group_name(length=15):
+    while True:
+        name = choices( string.ascii_lowercase + string.digits, k=length )
+
+        if not Group.objects.filter(name=name).exists():
+            return ''.join(name)
+
 class Group(models.Model):
-    name = models.CharField(unique=True, max_length=50)
+    name = models.CharField(unique=True, max_length=50, default=generate_unique_group_name)
     slug = models.CharField(max_length=50, null=False)
-    fernet_key = models.TextField(unique=True, null=True)
+    fernet_key = models.TextField(unique=True, null=True, default=generate_unique_fernet_key)
+    create_missing_objects_from_sources = models.BooleanField(default=False)
 
     @property
     def databases(self):
         return ferdolt_models.Database.objects.filter(id__in=self.groupdatabase_set.values("database__id"))
 
     def save(self, *args, **kwargs):
+        self.name = self.name.lower()
         self.slug = slugify(self.name)
 
         return super().save(*args, **kwargs)
@@ -69,6 +81,8 @@ class GroupDatabase(models.Model):
         verbose_name = _("Group database")
         verbose_name_plural = _("Group databases")
 
+        unique_together = ["database", "group"]
+
 class GroupTable(models.Model):
     name = models.CharField(max_length=100)
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='tables')
@@ -76,21 +90,48 @@ class GroupTable(models.Model):
     class Meta:
         verbose_name = _("Group table")
         verbose_name_plural = _("Group tables")
+        unique_together = [
+            ["group", "name"]
+        ]
 
     @property
     def column_count(self) -> int:
         return self.groupcolumn_set.count()
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+
+        super().save(*args, **kwargs)
 
 class GroupTableTable(models.Model):
     group_table = models.ForeignKey(GroupTable, on_delete=models.CASCADE)
     table = models.ForeignKey( ferdolt_models.Table, on_delete=models.CASCADE )
 
 class GroupColumn(models.Model):
+    data_types = (
+        ("datetime", _("Datetime")),
+        ("date", _("Date")),
+        ("int", _("Integer")),
+        ("float", _("Float")),
+        ("double", _("Double")),
+        ("char", _("Character"))
+    )
+
     name = models.CharField(max_length=150)
     group_table = models.ForeignKey(GroupTable, on_delete=models.CASCADE, related_name='columns')
     is_required = models.BooleanField(default=False)
-    data_type = models.CharField(max_length=50)
+    data_type = models.CharField(max_length=50, choices=data_types)
     is_nullable = models.BooleanField(default=True)
+    character_maximum_length = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        unique_together = [
+            ["group_table", "name"]
+        ]
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        super().save(*args, **kwargs)
 
 class GroupColumnColumn(models.Model):
     group_column = models.ForeignKey(GroupColumn, on_delete=models.CASCADE)
