@@ -113,12 +113,11 @@ class GroupDatabaseSerializer(serializers.ModelSerializer):
 
 
 class ExtractFromGroupSerializer(serializers.ModelSerializer):
-    target_databases = GroupDatabaseSerializer( many=True, write_only=True, required=False, allow_empty=True )
     use_time = serializers.BooleanField(default=True, required=False)
 
     class Meta:
         model = models.GroupExtraction
-        fields = ( "source_database", "target_databases", "use_time")
+        fields = ( "source_database", "use_time")
 
     def validate_source_database(self, data):
         if not data.can_write:

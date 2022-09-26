@@ -215,6 +215,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                     
             return Response( data=serializer.data, status=status.HTTP_201_CREATED )
 
+        use_time = not ( 'use_time' in validated_data and not validated_data['use_time'] )
     @action(
         methods=['GET'],
         detail=True

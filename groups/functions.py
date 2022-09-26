@@ -22,7 +22,11 @@ from groups import serializers
 
 from . import models
 
-def extract_from_groupdatabase(group_database: models.GroupDatabase, use_time=True, start_time=None, target_databases=None):
+def extract_from_groupdatabase(
+    group_database: models.GroupDatabase, 
+    use_time=True, 
+    start_time=None, target_databases=None
+):
     group: models.Group = group_database.group
     f = Fernet(group.get_fernet_key())
 
