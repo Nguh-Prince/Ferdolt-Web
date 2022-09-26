@@ -12,7 +12,6 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 
 import pyodbc
-
 import psycopg
 
 from rest_framework import permissions as drf_permissions
@@ -233,8 +232,8 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     )
     def synchronize(self, request, *args, **kwargs):
         errors = []
-        group = self.get_object()
-        f = Fernet(FERNET_KEY)
+        group: models.Group = self.get_object()
+        f = Fernet(group.get_fernet_key())
         
         synchronized_databases = []
         applied_synchronizations = []
@@ -255,8 +254,6 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                         # the keys of this dictionary are the group's tables
                         dictionary: dict = json.loads(content)
                         dictionary = dictionary[group.slug]
-
-                        breakpoint()
 
                         for group_table_name in dictionary.keys():
                             try:

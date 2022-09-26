@@ -16,6 +16,8 @@ from core.functions import encrypt, decrypt
 from ferdolt import models as ferdolt_models
 from flux.models import Extraction, Synchronization
 
+from huey.contrib import djhuey as huey
+
 def generate_unique_fernet_key():
     while True:
         generated_key_is_unique = True

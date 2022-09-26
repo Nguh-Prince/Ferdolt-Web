@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'communication',
     'users',
     "rest_framework.authtoken",
-    'simple_history'
+    'simple_history',
 ]
 
 ASGI_APPLICATION = 'ferdolt_web.asgi.application'
@@ -110,7 +110,6 @@ DATABASES = {
     }
 }
 
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -144,10 +143,6 @@ MEDIA_ROOT = "files"
 MEDIA_URL = "media/"
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-PATH_TO_KITCHEN = r"C:\pdi-ce-9.3.0.0-428\data-integration\Kitchen.bat"
-
-PATH_TO_PENTAHO_DATABASE = os.path.join( BASE_DIR, 'pentaho_files', 'BikeStores', 'data', 'database.sqlite' )
 
 LOGGING = {
     'version': 1,
