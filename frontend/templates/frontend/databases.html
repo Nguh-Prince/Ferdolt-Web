@@ -79,8 +79,16 @@
     {% if not database %}
     <div class="row">
         <div class="col-sm-12">
-            <div class="page-title-box">
-                <div class="row justify-content-end">
+            <div class="page-title-box row">
+                <div class="row col-md-6 justify-content-start">
+                    <div class="col-auto align-self-center d-none" id="delete-databases-button">
+                        <button class="btn btn-outline-danger btn-sm add-file">
+                            </i>{% trans "Delete database" %}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row col-md-6 justify-content-end">
                     <div class="col-auto align-self-center">
                         <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
                             data-bs-target="#new-database-modal">
@@ -436,6 +444,15 @@
             $("#synchronize-databases-button").addClass('d-none')
         } else {
             $("#synchronize-databases-button").removeClass('d-none')
+        }
+
+        if (SELECTED_DATABASES.length >= 1) {
+            $("#delete-databases-button").removeClass('d-none')
+            let text = SELECTED_DATABASES.length > 1 ? "Delete databases" : "Delete database"
+            
+            $("#delete-databases-button button").text(text)
+        } else {
+            $("#delete-databases-button").addClass('d-none')
         }
 
         populateSynchronizeDatabaseseModalTable()
