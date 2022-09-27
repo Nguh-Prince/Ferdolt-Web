@@ -51,7 +51,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
     def get_queryset(self):
         return models.Group.objects.all()
-
+    
     @action(
         methods=['POST'],
         detail=True
@@ -507,14 +507,20 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
             for database in all_databases:
                 if database in source_databases_set:
                     logging.info(f"Creating a read/write database using {database}")
-                    group_database = models.GroupDatabase.objects.create(group=group, database=database, can_write=True, can_read=True)
+                    group_database = models.GroupDatabase.objects.create(
+                        group=group, database=database, can_write=True, can_read=True
+                    )
                 else:
                     logging.info(f"Creating a read-only database using {database}")
                     group_database = models.GroupDatabase.objects.create(group=group, database=database, can_read=True)
                 
                 group_databases.append(group_database)
 
-            for table in ferdolt_models.Table.objects.filter(schema__database__in=source_databases_set):
+            for table in ferdolt_models.Table.objects.filter(
+                Q(schema__database__in=source_databases_set) & 
+                ~Q(id__in=ferdolt_models.Table.objects.filter(deletion_table__isnull=False)
+                .values("deletion_table__id"))
+            ):
                 group_table_name = f"{table.schema.name}__{table.name}"
                 table_columns = table.column_set.all()
                 table_database = table.schema.database
@@ -578,6 +584,6 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                             # create column
                             pass
             
-            return Response( serializers.GroupSerializer(group).data, status=status.HTTP_201_CREATED)
+            return Response( serializers.GroupDetailSerializer(group).data, status=status.HTTP_201_CREATED)
         else:
             pass

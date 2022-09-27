@@ -795,7 +795,7 @@ def insert_update_delete_trigger_query( table, trigger_name, sequence_name, prim
 
                                     + ' DELETE FROM @table_id;'
                                     
-                                  f  + ' SET @offset = @offset + 1; '
+                                    + ' SET @offset = @offset + 1; '
 
                                     + 'INSERT INTO @table_id SELECT { ', '.join( [ column.name for column in primary_key_columns ] ) } FROM inserted WHERE tracking_id IS NULL '
                                     + ' ORDER BY { ', '.join( [ column.name for column in primary_key_columns ] ) } OFFSET @offset ROWS ' 

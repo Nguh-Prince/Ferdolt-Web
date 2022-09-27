@@ -1,5 +1,6 @@
 from hashlib import sha256
 import logging
+import os
 
 from django.db import models
 
@@ -15,18 +16,18 @@ class File(models.Model):
     hash = models.TextField( null=True, blank=True )
     history = HistoricalRecords()
 
-    def save(self, *args, **kwargs):
-        file_path = self.file.path
+    # def save(self, *args, **kwargs):
+    #     file_path = self.file.path
 
-        try: 
-            with open( file_path ) as __:
-                content = __.read()
-                self.hash = sha256( content.encode('utf-8') ).hexdigest()
+    #     try: 
+    #         with open( file_path ) as __:
+    #             content = __.read()
+    #             self.hash = sha256( content.encode('utf-8') ).hexdigest()
 
-        except FileNotFoundError as e:
-            logging.error(f"Couldn't set hash for {file_path} because the file was not found")
+    #     except FileNotFoundError as e:
+    #         logging.error(f"Couldn't set hash for {file_path} because the file was not found")
         
-        return super().save(*args, **kwargs)
+    #     return super().save(*args, **kwargs)
 
     def get_file_hash(self, *args, **kwargs):
         file_path = self.file.path
@@ -48,7 +49,7 @@ class File(models.Model):
 
 class Extraction(models.Model):
     time_made = models.DateTimeField()
-    file = models.ForeignKey(File, on_delete=models.PROTECT)
+    file = models.OneToOneField(File, on_delete=models.PROTECT)
     history = HistoricalRecords()
      
     # this time is used to query the target database 

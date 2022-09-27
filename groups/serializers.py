@@ -3,6 +3,7 @@ from typing import Iterable
 from django.utils.translation import gettext as _
 
 from rest_framework import serializers
+from core.functions import decrypt
 
 from ferdolt.models import Column, Database
 from ferdolt.serializers import ColumnSerializer, DatabaseSerializer
@@ -86,10 +87,10 @@ class GroupCreationSerializer(serializers.ModelSerializer):
 
 class GroupDetailSerializer(serializers.ModelSerializer):
     class GroupDatabaseSerializer(serializers.ModelSerializer):
-        database_id = serializers.IntegerField(source='database.id')
+        database_id = serializers.CharField(source='database.id')
         database_name = serializers.CharField(source='database.name')
-        database_host = serializers.CharField(source='database.host')
-        database_port = serializers.IntegerField(source='database.port')
+        database_host = serializers.CharField(source='database.get_host')
+        database_port = serializers.CharField(source='database.get_port')
 
         class Meta:
             model = models.GroupDatabase

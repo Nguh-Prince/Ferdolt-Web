@@ -15,6 +15,31 @@ from ferdolt_web.settings import FERNET_KEY
 
 f = fernet.Fernet(FERNET_KEY)
 
+def generate_server_id(length=15):
+    server_id = None
+
+    while True:
+        server_id = generate_random_string(length)
+
+        if not Server.objects.filter(server_id=server_id).exists():
+            break
+
+    return server_id
+
+class Server(models.Model):
+    ID_MAX_LENGTH = 15
+    name = models.CharField(max_length=50, unique=True)
+    location = models.TextField(null=True, blank=True)
+    server_id = models.CharField(max_length=ID_MAX_LENGTH, unique=True, default=generate_server_id)
+    address = models.CharField(max_length=150)
+    port = models.IntegerField(null=True, blank=True)
+    history = HistoricalRecords()
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.lower()
+        
+        return super().save(*args, **kwargs)
+
 class DatabaseManagementSystem(models.Model):
     name = models.CharField(max_length=50, unique=True, null=False)
 
@@ -240,28 +265,3 @@ def generate_random_string(length, include_uppercase=True, include_lowercase=Fal
             string_set += symbol_set
 
         return  ''.join(random.choices( string_set, k=length ))
-
-def generate_server_id(length=15):
-    server_id = None
-
-    while True:
-        server_id = generate_random_string(length)
-
-        if not Server.objects.filter(server_id=server_id).exists():
-            break
-
-    return server_id
-
-class Server(models.Model):
-    ID_MAX_LENGTH = 15
-    name = models.CharField(max_length=50, unique=True)
-    location = models.TextField(null=True, blank=True)
-    server_id = models.CharField(max_length=ID_MAX_LENGTH, unique=True, default=generate_server_id)
-    address = models.CharField(max_length=150)
-    port = models.IntegerField(null=True, blank=True)
-    history = HistoricalRecords()
-
-    def save(self, *args, **kwargs):
-        self.name = self.name.lower()
-        
-        return super().save(*args, **kwargs)

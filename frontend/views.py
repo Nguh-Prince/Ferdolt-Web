@@ -160,7 +160,7 @@ def index(request):
 
     database_names = [ f.name for f in databases ]
     max_total_extraction_size = (extractions.values("extractionsourcedatabase__database__id")
-        .annotate(size=Sum("file__size")).aggregate(Max("size"))
+        .annotate(size=Sum("file__size")).aggregate(size__max=Coalesce(Max("size"), 0.0))
     )['size__max']
 
     data = {
@@ -261,7 +261,7 @@ def databases(request, id: int=None):
     databases = ferdolt_models.Database.objects.all()
 
     context = {'database': database, 
-    'databases': databases}
+    'databases': databases, 'dbms_versions': ferdolt_models.DatabaseManagementSystemVersion.objects.all()}
 
     if id:
         query = databases.filter(id=id)

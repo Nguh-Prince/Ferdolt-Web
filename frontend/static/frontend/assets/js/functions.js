@@ -115,6 +115,10 @@ function getCookie(name) {
     return cookieValue;
 }
 
+function getCsrfTokenCookie(name="csrftoken") {
+    return getCookie(name)
+}
+
 function ajaxGet(url, headers, successCallback, errorCallback) {
     ajaxRequest("GET", url, headers, successCallback, errorCallback)
 }
@@ -476,11 +480,11 @@ function displayMessage(message, classes = ['alert-danger', 'alert-dismissible']
 function displayRequestErrors(responseData) {
     // responseData is the object returned by the server in case of an error, should contain a status code and a responseText
     if (responseData.status == 500) {
-        displayMessage(ERROR_MESSAGES["500"])
+        displayMessage(ERROR_MESSAGES["500"], ['alert-danger', 'alert-dismissible'], timeout=null)
     } else if (responseData.status == 403) {
-        displayMessage(ERROR_MESSAGES["403"])
+        displayMessage(ERROR_MESSAGES["403"], ['alert-danger', 'alert-dismissible'], timeout=null)
     } else {
-        displayMessage(responseData.responseText)
+        displayMessage(responseData.responseText, ['alert-danger', 'alert-dismissible'], timeout=null)
     }
 }
 

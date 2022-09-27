@@ -51,7 +51,10 @@ class Group(models.Model):
     name = models.CharField(unique=True, max_length=50, default=generate_unique_group_name)
     slug = models.CharField(max_length=50, null=False)
     fernet_key = models.TextField(unique=True, null=True, default=generate_unique_fernet_key)
-    create_missing_objects_from_sources = models.BooleanField(default=False)
+    # set this to True if objects that are missing in group member's databases should be created
+    # e.g. a group member is lacking a column or table
+    create_missing_objects_from_sources = models.BooleanField(default=False) 
+    is_active = models.BooleanField(default=True)
 
     @property
     def databases(self):
@@ -66,11 +69,16 @@ class Group(models.Model):
     def get_fernet_key(self):
         return decrypt(self.fernet_key)[1]
 
+DEFAULT_EXTRACTION_FREQUENCY = 1
+DEFAULT_SYNCHRONIZATION_FREQUENCY = 1
+
 class GroupDatabase(models.Model):
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE, null=True)
     can_write = models.BooleanField(default=True) # set this to False if this server does not create data related to this group
     can_read = models.BooleanField(default=True) # set this to False if this server does not integrate data from this group
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    extraction_frequency = models.BigIntegerField(null=True) # how often data should be extracted from this database in minutes 
+    synchronization_frequency = models.BigIntegerField(null=True) # how often this database should be synchronized with data from the group in minutes
 
     def clean(self) -> None:
         if not self.can_write and not self.can_read:
@@ -78,6 +86,15 @@ class GroupDatabase(models.Model):
              _("The group must be writeable or readable") 
             )
         return super().clean()
+
+    def save(self, *args, **kwargs) -> None:
+        if self.can_write and not self.extraction_frequency:
+            self.extraction_frequency = 1
+        
+        if self.can_read and not self.synchronization_frequency:
+            self.synchronization_frequency = 1
+
+        return super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("Group database")
@@ -108,6 +125,11 @@ class GroupTable(models.Model):
 class GroupTableTable(models.Model):
     group_table = models.ForeignKey(GroupTable, on_delete=models.CASCADE)
     table = models.ForeignKey( ferdolt_models.Table, on_delete=models.CASCADE )
+
+    class Meta:
+        unique_together = [
+            ["group_table", "table"]
+        ]
 
 class GroupColumn(models.Model):
     data_types = (

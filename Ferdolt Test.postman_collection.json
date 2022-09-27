@@ -1,0 +1,1011 @@
+{
+	"info": {
+		"_postman_id": "2cb40345-42b7-4b7f-9332-06718ade32ff",
+		"name": "Ferdolt Test",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication Module",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"username\": \"prince\",\r\n    \"password\": \"password\"\r\n}"
+						},
+						"url": {
+							"raw": "{{SERVER_ADDRESS}}/api/users/login",
+							"host": [
+								"{{SERVER_ADDRESS}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Ferdolt Module",
+			"item": [
+				{
+					"name": "Server Model",
+					"item": [
+						{
+							"name": "Read Servers",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/servers/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"servers",
+										""
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Database Model",
+					"item": [
+						{
+							"name": "Create Database",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"name\": \"bikestores6\",\r\n    \"username\": \"sa\",\r\n    \"password\": \"groupesia@2022\",\r\n    \"host\": \"localhost\",\r\n    \"port\": 1433,\r\n    \"version\": {\r\n        \"dbms\": 1,\r\n        \"version_number\": \"18.2\",\r\n        \"dbms_object\": {\r\n            \"id\": 1,\r\n            \"name\": \"SQL Server Express\"\r\n        }\r\n    },\r\n    \"instance_name\": \"SQLEXPRESS\"\r\n}"
+								},
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/databases/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"databases",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read Databases",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/databases/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"databases",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read Database Details",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/databases/{{DATABASE_ID}}/?format=json",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"databases",
+										"{{DATABASE_ID}}",
+										""
+									],
+									"query": [
+										{
+											"key": "format",
+											"value": "json"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Refresh Database",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/databases/2/refresh/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"databases",
+										"2",
+										"refresh",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Initialize Database",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/databases/{{DATABASE_ID}}/initialize/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"databases",
+										"{{DATABASE_ID}}",
+										"initialize",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Synchronize Database",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/databases/1/synchronize/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"databases",
+										"1",
+										"synchronize",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read Database Extractions",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/databases/1/extractions/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"databases",
+										"1",
+										"extractions",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Test Database Connection",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": null
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Table Model",
+					"item": [
+						{
+							"name": "CRUD Operations",
+							"item": [
+								{
+									"name": "Insert Into Table",
+									"request": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"database\": \"BikeStores\",\r\n    \"schema\": \"production\",\r\n    \"table\": \"brands\",\r\n    \"data\": [\r\n        {\r\n            \"brand_name\": \"HP LE1901w\"\r\n        },\r\n        {\r\n            \"brand_name\": \"Dell 1290\"\r\n        }\r\n    ]\r\n}"
+										},
+										"url": {
+											"raw": "{{SERVER_ADDRESS}}/api/ferdolt/tables/insert_data/",
+											"host": [
+												"{{SERVER_ADDRESS}}"
+											],
+											"path": [
+												"api",
+												"ferdolt",
+												"tables",
+												"insert_data",
+												""
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Update Table data",
+									"request": {
+										"method": "PUT",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"database\": \"BikeStores\",\r\n    \"schema\": \"production\",\r\n    \"table\": \"brands\",\r\n    \"data\": [\r\n        {\r\n            \"current\": {\r\n                \"brand_id\": \"30\"\r\n            },\r\n            \"update\": {\r\n                \"brand_name\": \"Coco Chanel\"\r\n            }\r\n        },\r\n        {\r\n            \"current\": {\r\n                \"brand_name\": \"HPX-2000\"\r\n            },\r\n            \"update\": {\r\n                \"brand_name\": \"New HP model\"\r\n            }\r\n        },\r\n        {\r\n            \"current\": {\r\n                \"brand_id\": 22\r\n            },\r\n            \"update\": {\r\n                \"brand_name\": \"Fenty\"\r\n            }\r\n        }\r\n    ]\r\n}"
+										},
+										"url": {
+											"raw": "{{SERVER_ADDRESS}}/api/ferdolt/tables/update_data/",
+											"host": [
+												"{{SERVER_ADDRESS}}"
+											],
+											"path": [
+												"api",
+												"ferdolt",
+												"tables",
+												"update_data",
+												""
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Delete Table Data",
+									"request": {
+										"method": "DELETE",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"database\": \"BikeStores\",\r\n    \"schema\": \"production\",\r\n    \"table\": \"brands\",\r\n    \"data\": [\r\n        {\r\n            \"brand_name\": [\"HP LE1901w\"]\r\n        }\r\n    ]\r\n}"
+										},
+										"url": {
+											"raw": "{{SERVER_ADDRESS}}/api/ferdolt/tables/delete_data/",
+											"host": [
+												"{{SERVER_ADDRESS}}"
+											],
+											"path": [
+												"api",
+												"ferdolt",
+												"tables",
+												"delete_data",
+												""
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Delete Table Data Copy",
+									"request": {
+										"method": "DELETE",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"database\": \"BikeStores\",\r\n    \"schema\": \"production\",\r\n    \"table\": \"brands\",\r\n    \"data\": [\r\n        {\r\n            \"brand_name\": [\"HP LE1901w\"]\r\n        }\r\n    ]\r\n}"
+										},
+										"url": {
+											"raw": "{{SERVER_ADDRESS}}/api/ferdolt/tables/delete_data/",
+											"host": [
+												"{{SERVER_ADDRESS}}"
+											],
+											"path": [
+												"api",
+												"ferdolt",
+												"tables",
+												"delete_data",
+												""
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Read Table Records",
+									"request": {
+										"method": "GET",
+										"header": [],
+										"url": null
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Authentication Module Copy",
+							"item": [
+								{
+									"name": "Sign up (Register)",
+									"request": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"username\": \"prince\",\r\n    \"password\": \"password\",\r\n    \"person\": {\r\n        \"first_name\": \"Nguh\",\r\n        \"last_name\": \"Prince\",\r\n        \"phone\": \"653540703\",\r\n        \"country_code\": \"+237\"\r\n    }\r\n}"
+										},
+										"url": {
+											"raw": "{{SERVER_ADDRESS}}/auth/register",
+											"host": [
+												"{{SERVER_ADDRESS}}"
+											],
+											"path": [
+												"auth",
+												"register"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Login",
+									"request": {
+										"method": "POST",
+										"header": [
+											{
+												"key": "Content-Type",
+												"value": "application/json",
+												"type": "text"
+											}
+										],
+										"body": {
+											"mode": "raw",
+											"raw": "{\r\n    \"identifier\": \"prince\",\r\n    \"password\": \"password\"\r\n}"
+										},
+										"url": {
+											"raw": "{{SERVER_ADDRESS}}/auth/login",
+											"host": [
+												"{{SERVER_ADDRESS}}"
+											],
+											"path": [
+												"auth",
+												"login"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Read Table",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": null
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Flux Module",
+			"item": [
+				{
+					"name": "Extractions Model",
+					"item": [
+						{
+							"name": "Create Extraction",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"start_time\": null,\r\n    \"databases\": [\r\n        {\r\n            \"database\": 1,\r\n            \"schemas\": [\r\n                {\r\n                    \"schema\": 3,\r\n                    \"tables\": [\r\n                        {\r\n                            \"table\": 16\r\n                        }\r\n                    ]\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+								},
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/flux/extractions/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"flux",
+										"extractions",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create Extraction For Specific Tables",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"start_time\": null,\r\n    \"databases\": [\r\n        {\r\n            \"database\": 1,\r\n            \"schemas\": [\r\n                {\r\n                    \"schema\": 3,\r\n                    \"tables\": [\r\n                        {\r\n                            \"table\": 16\r\n                        }\r\n                    ]\r\n                }\r\n            ]\r\n        }\r\n    ],\r\n    \"target_databases\": [\r\n        3, 4\r\n    ]\r\n}"
+								},
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/flux/extractions/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"flux",
+										"extractions",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read Extractions",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/flux/extractions/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"flux",
+										"extractions",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read Extraction Content",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/flux/extractions/23/content?format=json",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"flux",
+										"extractions",
+										"23",
+										"content"
+									],
+									"query": [
+										{
+											"key": "format",
+											"value": "json"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Synchronizations Model",
+					"item": [
+						{
+							"name": "Create Synchronization(s)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"databases\": [\r\n        {\r\n            \"id\": 6,\r\n            \"name\": \"BikeStores\",\r\n            \"host\": \"localhost\",\r\n            \"port\": 1433\r\n        }\r\n    ],\r\n    \"use_pentaho\": false\r\n}"
+								},
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/flux/synchronizations/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"flux",
+										"synchronizations",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read Synchronizations",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": null
+							},
+							"response": []
+						},
+						{
+							"name": "Delete All",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/flux/synchronizations/delete_all",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"flux",
+										"synchronizations",
+										"delete_all"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Synchronization",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": null
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Files Model",
+					"item": [
+						{
+							"name": "Read Files",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/flux/files/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"flux",
+										"files",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read File Detail",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/flux/files/4",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"flux",
+										"files",
+										"4"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Groups Module",
+			"item": [
+				{
+					"name": "Group Model",
+					"item": [
+						{
+							"name": "Create Group",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"name\": \"BikeStores-Global\",\r\n    \"databases\": [\r\n        {\r\n            \"id\": 1,\r\n            \"name\": \"bikestores\",\r\n            \"host\": \"localhost\",\r\n            \"port\": 1433\r\n        },\r\n        {\r\n            \"id\": 4,\r\n            \"name\": \"bikestores4\",\r\n            \"host\": \"localhost\",\r\n            \"port\": 1433\r\n        },\r\n        {\r\n            \"id\": 7,\r\n            \"name\": \"bikestores5\",\r\n            \"host\": \"localhost\",\r\n            \"port\": 1433\r\n        }\r\n    ],\r\n    \"tables\": [\r\n        {\r\n            \"name\": \"brands\",\r\n            \"columns\": [\r\n                {\r\n                    \"name\": \"brand_id\",\r\n                    \"is_required\": true,\r\n                    \"data_type\": \"int\",\r\n                    \"constraints\": [\r\n                        {\r\n                            \"is_primary_key\": true\r\n                        }\r\n                    ]\r\n                },\r\n                {\r\n                    \"name\": \"brand_name\",\r\n                    \"is_required\": true,\r\n                    \"data_type\": \"int\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+								},
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/groups/?format=json",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"groups",
+										""
+									],
+									"query": [
+										{
+											"key": "format",
+											"value": "json"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read Groups",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/groups/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"groups",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read Group",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/groups/1/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"groups",
+										"1",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Read Group Extractions",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": null
+							},
+							"response": []
+						},
+						{
+							"name": "Read Group Synchronizations",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": null
+							},
+							"response": []
+						},
+						{
+							"name": "Create Group Extraction",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"source_database\": 1\r\n}"
+								},
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/groups/1/extract/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"groups",
+										"1",
+										"extract",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Synchronize Group",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/groups/1/synchronize/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"groups",
+										"1",
+										"synchronize",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Link Columns",
+							"request": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"data\": [\r\n        {\r\n            \"group_column\": 1,\r\n            \"column\": 223\r\n        },\r\n        {\r\n            \"group_column\": 2,\r\n            \"column\": 225\r\n        }\r\n    ]\r\n}"
+								},
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/groups/1/link_columns",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"groups",
+										"1",
+										"link_columns"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create Group From List of Sources",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"type\": \"full\",\r\n    \"sources\": [13, 15],\r\n    \"participants\": [13, 15]\r\n}"
+								},
+								"url": {
+									"raw": "{{SERVER_ADDRESS}}/api/ferdolt/groups/synchronization_group/",
+									"host": [
+										"{{SERVER_ADDRESS}}"
+									],
+									"path": [
+										"api",
+										"ferdolt",
+										"groups",
+										"synchronization_group",
+										""
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Server Online",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": null
+			},
+			"response": []
+		},
+		{
+			"name": "Get Stats",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": null
+			},
+			"response": []
+		}
+	],
+	"auth": {
+		"type": "apikey",
+		"apikey": [
+			{
+				"key": "value",
+				"value": "Token {{TOKEN}}",
+				"type": "string"
+			},
+			{
+				"key": "key",
+				"value": "Authorization",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "SERVER_ADDRESS",
+			"value": "localhost:8000"
+		},
+		{
+			"key": "TOKEN",
+			"value": "2880973f6b2b84ada2e8434f90778ef5b5430cb3"
+		},
+		{
+			"key": "DATABASE_ID",
+			"value": "15"
+		}
+	]
+}

@@ -26,6 +26,10 @@
     .database-card .select-database {
         border-radius: 500%;
     }
+
+    .selected-database {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
 </style>
 {% endblock %}
 
@@ -95,7 +99,7 @@
         </div>
     </div>
 
-    <div class="row py-2" id="databases">
+    <div class="row py-2 justify-content-evenly" id="databases">
 
     </div>
     {% else %}
@@ -126,6 +130,20 @@
                     </div>
                 </div>
             </div>
+
+            {% if not database.is_initialized %}
+            <div class="row">
+                <span class="text-danger">
+                    <i data-feather="alert-triangle"></i> {% trans "This database has not been initialized" %}
+                </span>
+            </div>
+            <div class="row">
+                <button class="btn btn-outline-danger" data-database-id="{{database.id}}">
+                    <i data-feather="refresh-cw"></i> {% trans "Initialize database" %}
+                </button>
+            </div>
+            {% endif %}
+
             <!-- Create nested accordions for the schemas, tables and columns -->
             <ul class="cd-accordion cd-accordion--animated margin-top-lg margin-bottom-lg">
                 {% for schema in database.databaseschema_set.all %}
@@ -297,12 +315,54 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">{% trans "Synchronize databases" %}</div>
+                <div class="modal-title">{% trans "New database" %}</div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
             <div class="modal-body">
-                
+                <div class="mb-3">
+                    <label for="new-database-name">{% trans "Database name" %}</label>
+                    <input type="text" name="new-database-name" id="new-database-name" required class="form-control" value="BikeStores">
+                </div>
+
+                <div class="mb-3">
+                    <label for="new-database-dbms-version">{% trans "DBMS version" %}</label>
+                    <select id="new-database-dbms-version" class="form-select">
+                        {% for version in dbms_versions %}
+                        <option value="{{ version.id }}" 
+                            data-version-number="{{version.version_number}}"
+                            data-dbms-name="{{version.}}"
+                        >{{ version }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="new-database-instance-name">{% trans "Instance name" %}</label>
+                    <input id="new-database-instance-name" value="SQLEXPRESS" class="form-control" />
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <label for="new-database-host">{% trans "Host" %}</label>
+                        <input type="text" class="form-control" id="new-database-host" value="localhost">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="new-database-port">{% trans "Port" %}</label>
+                        <input type="number" id="new-database-port" class="form-control" value="1433">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="new-database-username">{% trans "Username" %}</label>
+                        <input type="text" class="form-control" id="new-database-username" value="sa">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="new-database-password">{% trans "Password" %}</label>
+                        <input type="password" id="new-database-password" class="form-control" value="groupesia@2022">
+                    </div>
+                </div>
             </div>
 
             <div class="modal-footer">
@@ -351,7 +411,7 @@
             </div>
 
             <div class="modal-footer">
-                <button class="btn btn-orange" id="submit-new-database-form">{% trans "Synchronize" %}</button>
+                <button class="btn btn-orange" id="create-group-from-databases">{% trans "Synchronize" %}</button>
             </div>
         </div>
     </div>
@@ -398,7 +458,7 @@
                     
                     if (i == dbmsVersionIndex) {
                         // cell with dbms version
-                        cell.textContent = `${database.version.dbms_object.name} ${database.version.version_number}`
+                        cell.textContent = `${database.version_object.dbms_object.name} ${database.version_object.version_number}`
                     } else {
                         cell.textContent = database[keys[i-(dbmsVersionIndex + 1)]]
                     }
@@ -430,32 +490,24 @@
             url: `http://${location.host}${API_URL}/ferdolt/databases/?format=json`,
             contentType: 'application/json',
             success: function (data) {
+                console.log("Gotten the data from the API")
+                console.log(data)
+
                 state.databases = data
                 displayDatabases()
             }
         })
     })
 
-    $('.select-database').change(function() {
-    console.log('Select database changed')
-    console.log($(this).prop('checked'))
-    console.log('This is: ')
-    console.log(this)})
-
     function init() {
-        for (let dbms of state.databaseManagementSystems) {
-            let option = createElement("option", [], { value: dbms['id'] })
-            option.textContent = dbms["name"]
-
-            $("#dbms-input").append(option)
-        }
-
         displayDatabases()
     }
 
     function displayDatabases() {
         console.log("In displayDatabases(): ")
         console.log(state.databases)
+        
+        $("#databases").html('')
 
         for (let database of state.databases) {
             displayDatabase(database)
@@ -475,13 +527,16 @@
     }
 
     function displayDatabase(databaseObject, containerSelector = "#databases") {
-        console.log("Creating card...")
+        console.log('The database object is ')
+        console.log(databaseObject)
 
+        console.log("Creating card...")
+        
         let card = createElementsRecursively(
             {
                 tag: "div",
-                classes: ["card", "mx-1", "database-card"],
-                attributes: { style: "width: 18rem;", id: `database-${databaseObject['id']}` },
+                classes: ["card", "database-card", "w-30"],
+                attributes: { id: `database-${databaseObject['id']}` },
                 elements: [
                     {
                         tag: "div",
@@ -519,7 +574,7 @@
         console.log("Created card...")
         $(card).find(".card-title").text(databaseObject["name"])
 
-        $(card).find('.card-subtitle').text(`${databaseObject['version']['dbms_object']['name']} ${databaseObject['version']['version_number']}`)
+        $(card).find('.card-subtitle').text(`${databaseObject['version_object']['dbms_object']['name']} ${databaseObject['version_object']['version_number']}`)
         $('.card')
 
         $(card).find('.database-host').text(`Host: ${databaseObject['clear_host']}`)
@@ -561,17 +616,22 @@
             if (!checked) {
                 // add database
                 addIdToSelectedDatabases(databaseObject.id)
+                $(this).addClass('selected-database')
 
                 displaySynchronizeDatabasesButton()
             } else {
                 // remove database
                 removeIdFromSelectedDatabases(databaseObject.id)
+                $(this).removeClass('selected-database')
 
                 displaySynchronizeDatabasesButton()
             }
         })
 
         console.log("Appended card...")
+        console.log('Returning card...')
+
+        return card
     }
 
     $("#dbms-input").change(function () {
@@ -609,23 +669,14 @@
     function submitNewDatabaseForm() {
         console.log("Submitting new database")
         formData = {
-            version: {
-                version_number: $("#dbms-version-input").val(),
-                dbms: $('#dbms-input').val(),
-                dbms_object: {
-                    name: $(`#dbms-input option[value=${$("#dbms-input").val()}]`).text(),
-                }
-            },
-            instance_name: $("#instance-name-input").val(),
-            name: $("#database-name").val(),
-            host: $("#database-host").val(),
-            port: $("#database-port").val(),
-            username: $("#database-username").val(),
-            password: $("#database-password").val()
+            dbms_version: $("#new-database-dbms-version").val(),
+            instance_name: $("#new-database-instance-name").val(),
+            name: $("#new-database-name").val(),
+            host: $("#new-database-host").val(),
+            port: $("#new-database-port").val(),
+            username: $("#new-database-username").val(),
+            password: $("#new-database-password").val()
         }
-
-        console.log("Data to submit")
-        console.log(JSON.stringify(formData))
 
         $.ajax({
             type: 'POST',
@@ -633,7 +684,7 @@
             url: `http://${location.host}${API_URL}/ferdolt/databases/`,
             data: JSON.stringify(formData),
             headers: {
-                "X-CSRFTOKEN": getCookie("csrf_token")
+                "X-CSRFTOKEN": getCsrfTokenCookie()
             },
             success: function (data) {
                 let flag = false;
@@ -660,6 +711,51 @@
 
     }
 
+    $("#create-group-from-databases").click(
+        () => {
+            createGroupFromDatabases()
+        }
+    )
+
+    function createGroupFromDatabases() {
+        let sources = []
+        let participants = []
+
+        let synchronizationType = $('#synchronization-type').val()
+
+        for (let database of SELECTED_DATABASES) {
+            sources.push(database.id)
+            participants.push(database.id)
+        }
+
+        if (sources.length > 0 && participants.length >= sources.length && synchronizationType) {
+            let formData = {
+                type: synchronizationType,
+                sources: sources, 
+                participants: participants
+            }
+
+            // submit the new group 
+            $.ajax({
+                type: "POST",
+                url: `http://${location.host}${API_URL}/ferdolt/groups/synchronization_group/`,
+                contentType: 'application/json',
+                headers: {
+                    'X-CSRFTOKEN': getCsrfTokenCookie()
+                },
+                data: JSON.stringify(formData),
+                success: function(data) {
+                    displayMessage("Group created successfully", ['alert-success', 'alert-dismissble'])
+                },
+                error: function(data) {
+                    console.log("There was an error creating a group from databases. Printing the request body")
+                    console.log(JSON.stringify(formData))
+
+                    displayRequestErrors(data)
+                }
+            })
+        }
+    }
 </script>
 {% endif %}
 
@@ -854,6 +950,7 @@
             $('.row-1').addClass('d-none')
         }
     })
+
 </script>
 {% endif %}
 {% endblock %}

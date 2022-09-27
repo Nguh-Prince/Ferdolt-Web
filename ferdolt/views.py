@@ -20,7 +20,8 @@ from django.utils.translation import gettext as _
 from django.utils import timezone
 
 from common.viewsets import MultipleSerializerViewSet
-from core.functions import get_database_connection, get_database_details, get_dbms_booleans, initialize_database, synchronize_database
+from core.functions import (get_database_connection, get_database_details, 
+                            get_dbms_booleans, initialize_database, synchronize_database)
 from ferdolt_web.settings import FERNET_KEY
 
 from flux import models as flux_models
@@ -46,7 +47,6 @@ class DatabaseManagementSystemVersionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return models.DatabaseManagementSystemVersion.objects.all()
-
 
 class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     permission_classes = [ IsStaff ]
@@ -79,12 +79,17 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         serializer.is_valid(raise_exception=True)
 
         database = serializer.create(serializer.validated_data)
+        data = {'data': serializers.DatabaseSerializer(database).data}
         try:
             get_database_details(database)
+            data = {'data': serializers.DatabaseSerializer(database).data, 
+            'message': _("Successfully got the database's details")}
+
         except InvalidDatabaseConnectionParameters as e:
             logging.error(f"Error connecting to the {database.__str__()}.")
+            data['message'] = _("Couldn't get the database details. Invalid connection parameters")
 
-        return super().create(request, *args, **kwargs)
+        return Response( data=data )
 
     @action(
         methods=["POST"], detail=True

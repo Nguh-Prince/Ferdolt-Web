@@ -6,7 +6,7 @@ from django.utils.translation import gettext as _
 import psycopg
 import pyodbc
 
-from core.functions import encrypt, initialize_database
+from core.functions import decrypt, encrypt, initialize_database
 
 from ferdolt_web import settings
 from frontend.views import get_database_connection
@@ -50,7 +50,7 @@ class DatabaseSerializer(serializers.ModelSerializer):
             fields = ( "name", )
     
     schemas = DatabaseSchemas(source='databaseschema_set', many=True, read_only=True)
-    version = DatabaseManagementSystemVersionSerializer(source='dbms_version')
+    version_object = DatabaseManagementSystemVersionSerializer(source='dbms_version', read_only=True)
     username = serializers.CharField(write_only=True)
     password = serializers.CharField(write_only=True)
     host = serializers.CharField(write_only=True)
@@ -64,7 +64,7 @@ class DatabaseSerializer(serializers.ModelSerializer):
     class Meta: 
         model = models.Database
         fields = ( "id", "name", "username", "password", 
-        'host', 'port', 'schemas', 'version', 'instance_name', "clear_username", "clear_password", 
+        'host', 'port', 'schemas', 'version_object', 'dbms_version', 'instance_name', "clear_username", "clear_password", 
         'clear_host', 'clear_port', 'is_initialized', 'provides_successful_connection')
         extra_kwargs = {
             'is_initialized': {'read_only': True},
@@ -88,7 +88,7 @@ class DatabaseSerializer(serializers.ModelSerializer):
         return data
 
     def validate(self, attrs):
-        query = Database.objects.filter(name=attrs['name'])
+        query = models.Database.objects.filter(name=attrs['name'])
 
         clear_host = decrypt(attrs['host'])[1]
         clear_port = decrypt(attrs['port'])[1]
@@ -103,20 +103,11 @@ class DatabaseSerializer(serializers.ModelSerializer):
                     }
                 ))
 
+        return attrs
+
     def create(self, validated_data) -> models.Database:
+        logging.info("In ferdolt.serializers.DatabaseSerializer, adding database")
         version = validated_data.pop("dbms_version")
-
-        query = models.DatabaseManagementSystemVersion.objects.filter(version_number=version['version_number'], dbms__name=version['dbms']['name'])
-        other_query = None
-
-        if query.exists():
-            version = query.first()
-        else:
-            other_query = models.DatabaseManagementSystem.objects.filter(name=version['dbms']['name'])
-
-            if other_query.exists():
-                version = models.DatabaseManagementSystemVersion(version_number=version['version_number'], dbms=other_query.first())
-                version.save()
 
         instance = self.Meta.model(dbms_version=version, **validated_data)
         instance.save()
@@ -162,7 +153,9 @@ class DatabaseDetailSerializer(DatabaseSerializer):
     
     class Meta: 
         model = models.Database
-        fields = ( "id", "name", "username", "password", 'host', 'port', 'schemas', 'version', 'instance_name' )
+        fields = ( "id", "name", "username", 
+        "password", 'host', 'port', 'schemas', 
+        'dbms_version', 'instance_name' )
 
 class DatabaseSchemaSerializer(serializers.ModelSerializer):
     class SchemaTables(serializers.ModelSerializer):

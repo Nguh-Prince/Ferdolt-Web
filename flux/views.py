@@ -19,6 +19,7 @@ from rest_framework.serializers import ValidationError
 from common.permissions import IsStaff
 
 from flux import serializers
+from groups.models import Group, GroupExtraction
 
 from . import models
 from .serializers import SynchronizationSerializer
@@ -64,30 +65,40 @@ class ExtractionViewSet(viewsets.ModelViewSet):
     @action(
         methods=['GET'],
         detail=True,
+        permission_classes=[IsStaff]
     )
     def content(self, request, *args, **kwargs):
         object = self.get_object()
 
         f = Fernet(FERNET_KEY)
+        
+        # check if this file is for a group extraction
+        group_extraction_query = GroupExtraction.objects.filter(extraction=object).first()
+
+        if not group_extraction_query:
+            pass
+        else:
+            group: Group = group_extraction_query.group
+            f = Fernet(group.get_fernet_key())
+
         file_path = object.file.file.path
         file = object.file
 
         try:
-            content = None
+            file_content = None
             zip_file = zipfile.ZipFile(file_path)
 
             for file in zip_file.namelist():
                 if file.endswith('.json'):
-                    content = zip_file.read(file)
+                    file_content = zip_file.read(file)
                     
-                    if content:
-                        content = decrypt(content)[1]
+                    if file_content:
+                        file_content = f.decrypt(file_content).decode('utf-8')
                         logging.debug("[In flux.views.SynchronizationViewSet.create] reading the unapplied synchronization file")
 
             zip_file.close()
-                
-            return Response( data={'content': json.loads(content), 
-            'message': _('Content gotten successfully') if content else _('The extraction is empty')} )
+            return Response( data={'content': json.loads(file_content), 
+            'message': _('Content gotten successfully') if file_content else _('The extraction is empty')} )
         except FileNotFoundError as e:
             return Response(data={'message': _("The file was not found. It has either been deleted, moved or renamed")}, 
             status=status.HTTP_404_NOT_FOUND)
