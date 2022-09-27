@@ -11,6 +11,7 @@ urlpatterns = [
     path("extractions/", views.extractions, name="extractions"),
     path("schemas/", views.schemas, name="schemas"),
     path('groups/', views.groups, name='groups'),
+    path('groups/<int:id>', views.groups, name='groups'),
     path("tables/", views.tables, name="tables"),
     path("tables/<int:id>/", views.tables, name="tables"),
     path("columns/", views.columns, name="columns"),

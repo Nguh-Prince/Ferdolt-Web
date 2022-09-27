@@ -344,7 +344,18 @@ def servers(request, id: int=None):
 
 @login_required
 def groups(request, id: int=None):
-    return render(request, "frontend/groups.html", context={'groups': groups_models.Group.objects.all()})
+    context = {'groups': groups_models.Group.objects.all()}
+    if id:
+        query = groups_models.Group.objects.filter(id=id)
+
+        if not query.exists():
+            return redirect("frontend:not_found")
+        
+        group = query.first()
+        
+        context['group'] = group
+
+    return render(request, "frontend/groups.html", context=context)
 
 @login_required
 def extractions(request):

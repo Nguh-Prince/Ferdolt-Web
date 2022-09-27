@@ -3,32 +3,51 @@
 
 {% block title %}DoDb | {% trans 'Groups' %}{% endblock %}
 
+{% block breadcrumbs %}
+    {% if group %}
+        <li class="breadcrumb-item"><a href="{% url 'frontend:groups' %}">{% trans "Groups" %}</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+            {{ group.name }}
+        </li>
+    {% else %}
+        <li class="breadcrumb-item active">
+            {% trans "Databases" %}
+        </li>
+    {% endif %}
+{% endblock %}
+
 {% block page_content %}
-<div class="row">
-    <div class="col-sm-12">
-        <div class="page-title-box">
-            <div class="row justify-content-end">
-                <div class="col-auto align-self-center">
-                    <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
-                        data-bs-target="#new-group-modal">
-                        <i class="fas fa-plus me-2"></i>{% trans "Add group" %}
-                    </button>
+    {% if not group %}
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="page-title-box">
+                    <div class="row justify-content-end">
+                        <div class="col-auto align-self-center">
+                            <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                                data-bs-target="#new-group-modal">
+                                <i class="fas fa-plus me-2"></i>{% trans "Add group" %}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
-<div class="row py-2" id="groups">
-    {% for group in groups %}
-        <div class="card mx-1" style="width: 18rem;" id="group-{{  group.id}}">
-            <div class="card-body">
-                <h5 class="card-title">{{ group.name }}</h5>
-                <button class="btn btn-primary my-3" data-bs-toggle="modal" data-bs-target="#group-detail-modal" onclick="displayGroup({{ group.id }})">{% trans "Detail" %}</button>
-            </div>
+        <div class="row py-2" id="groups">
+            {% for group in groups %}
+                <div class="card mx-1" style="width: 18rem;" id="group-{{  group.id}}">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ group.name }}</h5>
+                        <button class="btn btn-primary my-3" data-bs-toggle="modal" data-bs-target="#group-detail-modal" onclick="displayGroup({{ group.id }})">{% trans "Detail" %}</button>
+
+                        <a href="{% url 'frontend:groups' group.id %}" class="btn btn-primary my-3">{% trans "Open" %}</a>
+                    </div>
+                </div>
+            {% endfor %}
         </div>
-    {% endfor %}
-</div>
+    {% else %}
+        
+    {% endif %}
 {% endblock %}
 
 {% block modals %}
@@ -182,12 +201,6 @@
                                 <div class="accordion-body">
                                     <div class="accordion py-2" id="group-tables-accordion">
                                         
-                                    </div>
-
-                                    <div class="row justify-content-end">
-                                        <button style="width: 80px;" class="btn btn-outline-secondary" 
-                                        data-bs-target="#grouptable-modal" 
-                                        data-bs-toggle="modal">{% trans "Add table" %}</button>
                                     </div>
                                 </div>
                             </div>

@@ -2,6 +2,7 @@ from hashlib import sha256
 import json
 import logging
 import os
+from time import sleep
 import zipfile
 
 from cryptography.fernet import Fernet
@@ -173,7 +174,7 @@ def extract_from_groupdatabase(
         
         connection.close()
 
-def synchronize_group(group: models.Group):
+def synchronize_group(group: models.Group, use_primary_keys_for_verification=False):
     errors = []
     f = Fernet(group.get_fernet_key())
     
@@ -301,6 +302,8 @@ def synchronize_group(group: models.Group):
                                                 logging.error(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
 
                                         merge_query = None
+                                        
+                                        tracking_id_column = "tracking_id"
 
                                         if not deletion_table_regex.search(table_name):
                                             merge_query = ""
@@ -311,7 +314,7 @@ def synchronize_group(group: models.Group):
                                                         {
                                                             ' AND '.join(
                                                                 [ f"t.{column}=s.{column}" for column in primary_key_columns ]
-                                                            )
+                                                            ) if use_primary_keys_for_verification else f"t.{tracking_id_column}=s.{tracking_id_column}"
                                                         }
                                                     )
                                                     when matched { " and t.last_updated < s.last_updated " if use_time else ' ' } then 
@@ -330,9 +333,9 @@ def synchronize_group(group: models.Group):
                                             elif dbms_booleans['is_postgres_db']:
                                                 merge_query = f"""
                                                 INSERT INTO {schema_name}.{table_name} (SELECT * FROM {temporary_table_actual_name}) 
-                                                ON CONFLICT ( { ', '.join( [ column for column in primary_key_columns ] ) } )
+                                                ON CONFLICT ( { ', '.join( [ column for column in primary_key_columns ] ) if use_primary_keys_for_verification else tracking_id_column } )
                                                 DO 
-                                                    UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) }
+                                                    UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) if use_primary_keys_for_verification else ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns) }
                                                 """
                                             
                                         else:
@@ -417,3 +420,32 @@ def synchronize_group(group: models.Group):
             
             
             connection.close()
+
+def test_group_extraction(group: models.Group, duration: int=5*60, interval=30):
+    time_elapsed = 0
+    group_databases = group.groupdatabase_set.all()
+
+    while True:
+        if duration is not None and time_elapsed >= duration:
+            break
+
+        for group_database in group_databases:
+            print(f"Extracting from the {group_database.database} database")
+            extract_from_groupdatabase(group_database)
+
+        print(f'Sleeping for {interval} seconds')
+        sleep(interval)
+        time_elapsed += interval
+
+def test_group_synchronization(group: models.Group, duration: int=5*60, interval=30):
+    time_elapsed = 0
+
+    while True:
+        if duration is not None and time_elapsed >= duration:
+            break
+
+        synchronize_group(group)
+        
+        print(f'Sleeping for {interval} seconds')
+        sleep(interval)
+        time_elapsed += interval

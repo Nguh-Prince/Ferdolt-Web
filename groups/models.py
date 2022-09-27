@@ -94,6 +94,11 @@ class GroupDatabase(models.Model):
         if self.can_read and not self.synchronization_frequency:
             self.synchronization_frequency = 1
 
+        if 'force_insert' in kwargs:
+            # create GroupDatabaseSynchronizations for every GroupExtraction of this group
+            for extraction in self.groupextraction_set.filter(~Q(groupdatabasesynchronization__group_database=self)):
+                GroupDatabaseSynchronization.objects.create(group_database=self, extraction=extraction)
+
         return super().save(*args, **kwargs)
 
     class Meta:
@@ -190,3 +195,4 @@ class GroupDatabaseSynchronization(models.Model):
             self.time_applied = timezone.now()
 
         return super().save(*args, **kwargs)
+
