@@ -263,6 +263,11 @@ def get_table_foreign_key_references(table: ferdolt_models.Table, connection=Non
                     LEFT JOIN sys.foreign_key_columns fc2 ON fks.object_id = fc2.constraint_object_id
                     WHERE fks.parent_object_id=object_id('{table.schema.name}.{table.name}')
             """
+        elif dbms_booleans['is_postgres_db']:
+            query = f"""
+            
+            """
+            pass
         if query:
             rows = cursor.execute(query)
             columns = [ column[0] for column in cursor.description ]

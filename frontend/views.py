@@ -354,6 +354,8 @@ def groups(request, id: int=None):
         group = query.first()
         
         context['group'] = group
+        context['group_databases'] = group.groupdatabase_set.all()
+        context['databases'] = ferdolt_models.Database.objects.all()
 
     return render(request, "frontend/groups.html", context=context)
 

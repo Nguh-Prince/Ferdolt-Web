@@ -1,90 +1,196 @@
-{% extends 'frontend/base-template.html' %}
-{% load i18n static %}
+{% extends 'frontend/base-template.html' %} {% load i18n static %} {% block title %}DoDb | {% trans 'Groups' %}{% endblock %} {% block breadcrumbs %} {% if group %}
+<li class="breadcrumb-item"><a href="{% url 'frontend:groups' %}">{% trans "Groups" %}</a></li>
+<li class="breadcrumb-item active" aria-current="page">
+    {{ group.name }}
+</li>
+{% else %}
+<li class="breadcrumb-item active">
+    {% trans "Databases" %}
+</li>
+{% endif %} {% endblock %} {% block tabs %} {% if group %}
+<ul class="nav nav-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#structure" id="structure-tab" aria-current="page">
+            {% trans "Structure" %}
+        </button>
+    </li>
 
-{% block title %}DoDb | {% trans 'Groups' %}{% endblock %}
-
-{% block breadcrumbs %}
-    {% if group %}
-        <li class="breadcrumb-item"><a href="{% url 'frontend:groups' %}">{% trans "Groups" %}</a></li>
-        <li class="breadcrumb-item active" aria-current="page">
-            {{ group.name }}
-        </li>
-    {% else %}
-        <li class="breadcrumb-item active">
+    <li class="nav-item active" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#databases" id="databases-tab">
             {% trans "Databases" %}
-        </li>
-    {% endif %}
-{% endblock %}
+        </button>
+    </li>
+</ul>
+{% endif %} {% endblock %} {% block page_content %} {% if not group %}
+<div class="row">
+    <div class="col-sm-12">
+        <div class="page-title-box">
+            <div class="row justify-content-end">
+                <div class="col-auto align-self-center">
+                    <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal" data-bs-target="#new-group-modal">
+                                    <i class="fas fa-plus me-2"></i>{% trans "Add group" %}
+                                </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
-{% block page_content %}
-    {% if not group %}
+<div class="row py-2" id="groups">
+    {% for group in groups %}
+    <div class="card mx-1" style="width: 18rem;" id="group-{{  group.id}}">
+        <div class="card-body">
+            <h5 class="card-title">{{ group.name }}</h5>
+            <button class="btn btn-primary my-3" data-bs-toggle="modal" data-bs-target="#group-detail-modal" onclick="displayGroup({{ group.id }})">{% trans "Detail" %}</button>
+
+            <a href="{% url 'frontend:groups' group.id %}" class="btn btn-primary my-3">{% trans "Open" %}</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="tab-content" id="groups-page-tab-content">
+    <div class="tab-pane fade show my-2" id="structure" role="tabpanel" aria-labelledby="structure-tab">
         <div class="row">
             <div class="col-sm-12">
-                <div class="page-title-box">
+                <div class="page-title-box row">
                     <div class="row justify-content-end">
-                        <div class="col-auto align-self-center">
-                            <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
-                                data-bs-target="#new-group-modal">
-                                <i class="fas fa-plus me-2"></i>{% trans "Add group" %}
-                            </button>
+                        <div class=" col-auto align-self-center " id="actions-buttons-container ">
+                            <button class="btn btn-outline-success btn-sm mx-2 " id="extract ">
+                                            <i data-feather="upload " style="width: 16; height: 16; "></i> {% trans "Extract " %}
+                                        </button>
+                            <button class="btn btn-outline-orange btn-sm mx-2 ">
+                                            <i data-feather="download " style="width: 16; height: 16; "></i> {% trans "Synchronize " %}
+                                        </button>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="row py-2" id="groups">
-            {% for group in groups %}
-                <div class="card mx-1" style="width: 18rem;" id="group-{{  group.id}}">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ group.name }}</h5>
-                        <button class="btn btn-primary my-3" data-bs-toggle="modal" data-bs-target="#group-detail-modal" onclick="displayGroup({{ group.id }})">{% trans "Detail" %}</button>
+        <div class="row">
+            <!-- Create nested accordions for the tables and columns in this group -->
+            <ul class="cd-accordion cd-accordion--animated margin-top-lg margin-bottom-lg">
+                {% for table in group.tables.all %}
+                <li class="cd-accordion__item cd-accordion__item--has-children">
+                    <input class="cd-accordion__input" type="checkbox" name="{{ table.name.lower }}-{{table.id}}" id="{{ table.name.lower }}-{{table.id}}">
+                    <label class="cd-accordion__label cd-accordion__label--icon-folder" for="{{ table.name.lower }}-{{table.id}}">
+                        <input type="checkbox" class="mx-2 select-table" data-table-id="{{ table.id }}"
+                            data-schema-id="{{ schema.id }}" name="select-{{ table.name.lower }}-{{table.id}}">
+                        <span>{{ table.name }}</span></label>
 
-                        <a href="{% url 'frontend:groups' group.id %}" class="btn btn-primary my-3">{% trans "Open" %}</a>
+                    <ul class="cd-accordion__sub cd-accordion__sub--l2">
+                        <li class="cd-accordion__item">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>{% trans "Column name" %}</th>
+                                        <th>{% trans "Data type" %}</th>
+                                        <th>{% trans "Character max." %}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for column in table.columns.all %}
+                                    <tr>
+                                        <td>{{ column.name }}</td>
+                                        <td>{{ column.data_type }}</td>
+                                        <td>{{ column.character_maximum_length }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </li>
+                    </ul>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <div class="tab-pane fade show active my-2" id="databases" role="tabpanel" aria-labelledby="databases-tab">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="page-title-box row">
+                    <div class="row justify-content-end">
+                        <div class=" col-auto align-self-center " id="actions-buttons-container ">
+                            <button class="btn btn-outline-success btn-sm mx-2 " id="extract " data-bs-toggle="modal" data-bs-target="#add-database-to-group-modal">
+                                            <i data-feather="upload " style="width: 16; height: 16; "></i> {% trans "Add database " %}
+                                        </button>
+                        </div>
                     </div>
                 </div>
-            {% endfor %}
+            </div>
         </div>
-    {% else %}
-        
-    {% endif %}
-{% endblock %}
 
-{% block modals %}
-<div class="modal" id="new-group-modal" tabindex="-1">
-    <div class="modal-dialog modal-fullscreen">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title">{% trans "New Group" %}</div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="row">
+            {% if group_databases %}
+            <table class="table table-striped ">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>{% trans "Database Name " %}</th>
+                        <th>{% trans "Database host " %}</th>
+                        <th>{% trans "Can extract " %}</th>
+                        <th>{% trans "Can synchronize " %}</th>
+                        <th>{% trans "Extraction frequency" %}</th>
+                        <th>{% trans "Synchronization frequency" %}</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for group_database in group_databases %}
+                    <tr>
+                        <td></td>
+                        <td>{{ group_database.database.name }}</td>
+                        <td>{{ group_database.database.get_host }}</td>
+                        <td>{{ group_database.can_write }}</td>
+                        <td>{{ group_database.can_read }}</td>
+                        <td>
+                            {% if group_database.can_write %} {{ group_database.extraction_frequency }} {% else %} --- {% endif %}
+                        </td>
+                        <td>
+                            {% if group_database.can_read %} {{ group_database.synchronization_frequency }} {% else %} --- {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %} {% endblock %} {% block modals %}
+<div class="modal " id="new-group-modal " tabindex="-1 ">
+    <div class="modal-dialog modal-fullscreen ">
+        <div class="modal-content ">
+            <div class="modal-header ">
+                <div class="modal-title ">{% trans "New Group " %}</div>
+                <button type="button " class="btn-close " data-bs-dismiss="modal " aria-label="Close "></button>
             </div>
 
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label class="form-label" for="new-group-name-input">{% trans "Name" %}</label>
-                    <input type="text" id="new-group-name-input" class="form-control">
+            <div class="modal-body ">
+                <div class="mb-3 ">
+                    <label class="form-label " for="new-group-name-input ">{% trans "Name " %}</label>
+                    <input type="text " id="new-group-name-input " class="form-control ">
                 </div>
 
-                <div class="mb-3">
-                    <div class="accordion" id="new-group-accordion">
-                        <div class="accordion-item">
-                            <h2 class="accordion-header" id="new-group-table-heading">
-                                <button class="accordion-button"
-                                data-bs-target="#new-group-table-accordion-body" aria-expanded="true" aria-controls="new-group-table-accordion-body">
+                <div class="mb-3 ">
+                    <div class="accordion " id="new-group-accordion ">
+                        <div class="accordion-item ">
+                            <h2 class="accordion-header " id="new-group-table-heading ">
+                                <button class="accordion-button " data-bs-target="#new-group-table-accordion-body " aria-expanded="true " aria-controls="new-group-table-accordion-body ">
                                     Tables
                                 </button>
                             </h2>
 
-                            <div class="accordion-collapse collapse show" id="new-group-table-accordion-body" aria-labelledby="new-group-table-heading">
-                                <div class="accordion-body">
-                                    <div class="accordion py-2" id="new-group-tables-accordion">
-                                        
+                            <div class="accordion-collapse collapse show " id="new-group-table-accordion-body " aria-labelledby="new-group-table-heading ">
+                                <div class="accordion-body ">
+                                    <div class="accordion py-2 " id="new-group-tables-accordion ">
+
                                     </div>
 
-                                    <div class="row justify-content-end">
-                                        <button style="width: 80px;" class="btn btn-outline-secondary" 
-                                        data-bs-target="#new-grouptable-modal" 
-                                        data-bs-toggle="modal">{% trans "Add table" %}</button>
+                                    <div class="row justify-content-end ">
+                                        <button style="width: 80px; " class="btn btn-outline-secondary " data-bs-target="#new-grouptable-modal " data-bs-toggle="modal ">{% trans "Add table " %}</button>
                                     </div>
                                 </div>
                             </div>
@@ -93,114 +199,203 @@
                 </div>
             </div>
 
-            <div class="modal-footer">
-                <button class="btn btn-primary" id="submit-new-database-form" onclick="submitNewGroup()">{% trans "Submit" %}</button>
+            <div class="modal-footer ">
+                <button class="btn btn-primary " id="submit-new-database-form " onclick="submitNewGroup() ">{% trans "Submit " %}</button>
             </div>
         </div>
     </div>
 </div>
 
-<div class="modal" id="new-grouptable-modal" tabindex="-1">
-    <div class="modal-dialog modal-fullscreen">
+{% if group %}
+<div class="modal" id="add-database-to-group-modal" tabindex="-1">
+    <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">{% trans "New Table" %}</div>
-                <button type="button" class="btn-close" data-bs-target="#new-group-modal" data-bs-toggle="modal" aria-label="Close"></button>
+                <div class="modal-title">{% trans "Add database to group" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
 
             <div class="modal-body">
                 <div class="mb-3">
-                    <label class="form-label" for="new-grouptable-name-input">{% trans "Table name" %}</label>
-                    <input type="text" id="new-grouptable-name-input" class="form-control" value="Table">
+                    <label for="">{% trans "Select database" %}</label>
+                    <select id="add-database-select-database" class="form-select" multiple>
+                        {% for database in databases %}
+                            {% if database not in group.databases %}
+                            <option value="{{ database.id }}">{{ database.name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                        <option value="-1">{% trans "New database" %}</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submit-add-database-to-group-form">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="new-database-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "New database" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" data-bs-target="#add-database-to-group-modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="new-database-name">{% trans "Database name" %}</label>
+                    <input type="text" name="new-database-name" id="new-database-name" required class="form-control" value="BikeStores">
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">{% trans 'Columns' %}</label>
+                    <label for="new-database-dbms-version">{% trans "DBMS version" %}</label>
+                    <select id="new-database-dbms-version" class="form-select">
+                        {% for version in dbms_versions %}
+                        <option value="{{ version.id }}" 
+                            data-version-number="{{version.version_number}}"
+                            data-dbms-name="{{version.}}"
+                        >{{ version }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
 
-                    <table class="table table-striped">
+                <div class="mb-3">
+                    <label for="new-database-instance-name">{% trans "Instance name" %}</label>
+                    <input id="new-database-instance-name" value="SQLEXPRESS" class="form-control" />
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <label for="new-database-host">{% trans "Host" %}</label>
+                        <input type="text" class="form-control" id="new-database-host" value="localhost">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="new-database-port">{% trans "Port" %}</label>
+                        <input type="number" id="new-database-port" class="form-control" value="1433">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="new-database-username">{% trans "Username" %}</label>
+                        <input type="text" class="form-control" id="new-database-username" value="sa">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="new-database-password">{% trans "Password" %}</label>
+                        <input type="password" id="new-database-password" class="form-control" value="groupesia@2022">
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submit-new-database-form">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="modal " id="new-grouptable-modal " tabindex="-1 ">
+    <div class="modal-dialog modal-fullscreen ">
+        <div class="modal-content ">
+            <div class="modal-header ">
+                <div class="modal-title ">{% trans "New Table " %}</div>
+                <button type="button " class="btn-close " data-bs-target="#new-group-modal " data-bs-toggle="modal " aria-label="Close "></button>
+            </div>
+
+            <div class="modal-body ">
+                <div class="mb-3 ">
+                    <label class="form-label " for="new-grouptable-name-input ">{% trans "Table name " %}</label>
+                    <input type="text " id="new-grouptable-name-input " class="form-control " value="Table ">
+                </div>
+
+                <div class="mb-3 ">
+                    <label class="form-label ">{% trans 'Columns' %}</label>
+
+                    <table class="table table-striped ">
                         <thead>
                             <tr>
                                 <th></th>
-                                <th>{% trans "Name" %}</th>
-                                <th>{% trans "Data type" %}</th>
-                                <th>{% trans "Nullable?" %}</th>
-                                <th>{% trans "Primary key?" %}</th>
+                                <th>{% trans "Name " %}</th>
+                                <th>{% trans "Data type " %}</th>
+                                <th>{% trans "Nullable? " %}</th>
+                                <th>{% trans "Primary key? " %}</th>
                             </tr>
                         </thead>
 
                         <tbody>
-                            <tr id="default-row">
+                            <tr id="default-row ">
                                 <td></td>
                                 <td>
-                                    <input type="text" value="Column" class="form-control" id="default-row_name_input">
+                                    <input type="text " value="Column " class="form-control " id="default-row_name_input ">
                                 </td>
                                 <td>
-                                    <select class="form-control" id="default-row_data_type_input">
-                                        <option value="">Numeric</option>
-                                        <option value="">Character</option>
-                                        <option value="">Date</option>
-                                        <option value="">Datetime</option>
+                                    <select class="form-control " id="default-row_data_type_input ">
+                                        <option value=" ">Numeric</option>
+                                        <option value=" ">Character</option>
+                                        <option value=" ">Date</option>
+                                        <option value=" ">Datetime</option>
                                     </select>
                                 </td>
                                 <td>
-                                    <select class="form-control" id="default-row_nullable_input">
-                                        <option value="">{% trans "Yes" %}</option>
-                                        <option value="">{% trans "No" %}</option>
+                                    <select class="form-control " id="default-row_nullable_input ">
+                                        <option value=" ">{% trans "Yes " %}</option>
+                                        <option value=" ">{% trans "No " %}</option>
                                     </select>
                                 </td>
                                 <td>
-                                    <select class="form-control" id="default-row_primary_key_input">
-                                        <option value="">{% trans "Yes" %}</option>
-                                        <option value="">{% trans "No" %}</option>
+                                    <select class="form-control " id="default-row_primary_key_input ">
+                                        <option value=" ">{% trans "Yes " %}</option>
+                                        <option value=" ">{% trans "No " %}</option>
                                     </select>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
 
-                    <div class="row justify-content-end">
-                        <button style="width: 120px;" class="btn btn-outline-secondary" 
-                            onclick="addColumnsToNewTable()">{% trans "Add column" %}</button>
+                    <div class="row justify-content-end ">
+                        <button style="width: 120px; " class="btn btn-outline-secondary " onclick="addColumnsToNewTable() ">{% trans "Add column " %}</button>
                     </div>
                 </div>
             </div>
 
-            <div class="modal-footer">
-                <button class="btn btn-primary" data-bs-target="#new-group-modal" data-bs-toggle="modal"
-                 onclick="addTableToDraft()">{% trans "Done" %}</button>
+            <div class="modal-footer ">
+                <button class="btn btn-primary " data-bs-target="#new-group-modal " data-bs-toggle="modal " onclick="addTableToDraft() ">{% trans "Done " %}</button>
             </div>
         </div>
     </div>
 </div>
 
-<div class="modal" id="group-detail-modal" tabindex="-1">
-    <div class="modal-dialog modal-fullscreen">
-        <div class="modal-content">
-            <div class="modal-header">
-                <div class="modal-title">{% trans "Group detail" %}</div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+<div class="modal " id="group-detail-modal " tabindex="-1 ">
+    <div class="modal-dialog modal-fullscreen ">
+        <div class="modal-content ">
+            <div class="modal-header ">
+                <div class="modal-title ">{% trans "Group detail " %}</div>
+                <button type="button " class="btn-close " data-bs-dismiss="modal " aria-label="Close "></button>
             </div>
 
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label for="group-name-input" class="form-label">{% trans 'Name' %}</label>
-                    <input type="text" name="" id="group-name-input" class="form-control">
+            <div class="modal-body ">
+                <div class="mb-3 ">
+                    <label for="group-name-input " class="form-label ">{% trans 'Name' %}</label>
+                    <input type="text " name=" " id="group-name-input " class="form-control ">
                 </div>
 
-                <div class="mb-3">
-                    <div class="accordion" id="group-accordion">
-                        <div class="accordion-item">
-                            <h2 class="accordion-header" id="group-table-heading">
-                                <button class="accordion-button"
-                                data-bs-target="#group-table-accordion-body" aria-expanded="true" aria-controls="group-table-accordion-body">
+                <div class="mb-3 ">
+                    <div class="accordion " id="group-accordion ">
+                        <div class="accordion-item ">
+                            <h2 class="accordion-header " id="group-table-heading ">
+                                <button class="accordion-button " data-bs-target="#group-table-accordion-body " aria-expanded="true " aria-controls="group-table-accordion-body ">
                                     Tables
                                 </button>
                             </h2>
 
-                            <div class="accordion-collapse collapse show" id="group-table-accordion-body" aria-labelledby="group-table-heading">
-                                <div class="accordion-body">
-                                    <div class="accordion py-2" id="group-tables-accordion">
-                                        
+                            <div class="accordion-collapse collapse show " id="group-table-accordion-body " aria-labelledby="group-table-heading ">
+                                <div class="accordion-body ">
+                                    <div class="accordion py-2 " id="group-tables-accordion ">
+
                                     </div>
                                 </div>
                             </div>
@@ -211,9 +406,7 @@
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
+{% endblock %} {% block extra_js %}
 <script>
     var DRAFT = {
         name: '',
@@ -226,7 +419,7 @@
     })
 
     function getGroups() {
-        console.log("Getting the groups from the API")
+        console.log("Getting the groups from the API ")
         $.ajax({
             type: 'GET',
             url: `http://${location.host}${API_URL}/ferdolt/groups/`,
@@ -236,9 +429,9 @@
                 }
             },
             error: function(data) {
-                switch(data.status) {
+                switch (data.status) {
                     case 500:
-                        displayMessage("Error connecting to the server, couldn't load groups.")
+                        displayMessage("Error connecting to the server, couldn 't load groups.")
                         break;
                     default:
                         displayMessage("Error getting the groups")
@@ -250,11 +443,11 @@
 
     $(".accordion-button").click(function() {
         console.log("Clicked accordion-button")
-        let targetSelector = $(this).attr('data-bs-target')
+        let targetSelector = $(this).attr('data-bs-target ')
         console.log(`The target is: ${targetSelector}`)
 
         if (targetSelector) {
-            $(targetSelector).toggleClass('show')
+            $(targetSelector).toggleClass('show ')
         }
     })
 
@@ -264,17 +457,34 @@
         DRAFT.name = value
     })
 
-    function addColumnsToNewTable(count=1) {
+    $("#add-database-select-database").change(function() {
+        let value = $(this).val()
+
+        console.log("The select database input changed. Its value is")
+        console.log(value)
+
+        if (value.includes('-1')) {
+            // open the new database modal
+            $("#add-database-to-group-modal").modal('hide')
+            $("#new-database-modal").modal('show')
+        }
+    })
+
+    function addColumnsToNewTable(count = 1) {
         console.log("The number of columns to add is")
         console.log(count)
 
-        for (let i=0; i<count; i++) {
+        for (let i = 0; i < count; i++) {
             console.log(`Inserting row ${i+1}`)
             let rowId = generateRandomId()
-            let row = createElement('tr', [], {id: rowId})
+            let row = createElement('tr ', [], {
+                id: rowId
+            })
 
-            let deleteCell = createElement('td', [])
-            let deleteIcon = createElement('i', ['bg-error', 'text-danger'], {'data-feather': 'trash'})
+            let deleteCell = createElement('td ', [])
+            let deleteIcon = createElement('i ', ['bg-error ', 'text-danger '], {
+                'data-feather ': 'trash '
+            })
             $(deleteCell).append(deleteIcon)
             $(row).append(deleteCell)
 
@@ -283,75 +493,85 @@
             }
 
             // name input
-            let nameCell = createElement('td', [])
-            let nameInput = createElement('input', ['form-control'], {id: `${rowId}_name_input`})
+            let nameCell = createElement('td ', [])
+            let nameInput = createElement('input ', ['form-control '], {
+                id: `${rowId}_name_input`
+            })
             $(nameCell).append(nameInput)
             $(row).append(nameCell)
 
             // data type input
-            let dataTypeCell = createElement('td', [])
-            let dataTypeSelect = createElement('select', ['form-control'], {id: `${rowId}_data_type_input`})
+            let dataTypeCell = createElement('td ', [])
+            let dataTypeSelect = createElement('select ', ['form-control '], {
+                id: `${rowId}_data_type_input`
+            })
             let dataTypes = {
-                'number': "Numeric",
+                'number ': "Numeric",
                 "character": "Character",
                 "date": "Date",
                 "datetime": "Datetime"
             }
-            
-            for ( let dataType of Object.keys(dataTypes) ) {
-                let option = createElement('option', [], {
+
+            for (let dataType of Object.keys(dataTypes)) {
+                let option = createElement('option ', [], {
                     value: dataType
                 })
                 option.textContent = dataTypes[dataType];
-                
+
                 $(dataTypeSelect).append(option)
             }
             $(dataTypeCell).append(dataTypeSelect)
             $(row).append(dataTypeCell)
 
-            let nullableCell = createElement('td', [])
-            let nullableSelect = createElement('select', ['form-control'], {id: `${rowId}_nullable_input`})
+            let nullableCell = createElement('td ', [])
+            let nullableSelect = createElement('select ', ['form-control '], {
+                id: `${rowId}_nullable_input`
+            })
 
             let nullableOptions = {
-                'true': "Yes",
-                'false': "No"
+                'true ': "Yes",
+                'false ': "No"
             }
 
             for (let nullableOption of Object.keys(nullableOptions)) {
-                let option = createElement('option', [], {value: nullableOption})
+                let option = createElement('option ', [], {
+                    value: nullableOption
+                })
                 option.textContent = nullableOptions[nullableOption]
 
                 $(nullableSelect).append(option)
             }
-            
-            $(nullableCell).append(nullableSelect)
-            $(row).append(nullableCell)
 
             $(nullableCell).append(nullableSelect)
             $(row).append(nullableCell)
 
-            let primaryKeyCell = createElement('td', [])
-            let primaryKeySelect = createElement('select', ['form-control'], {id: `${rowId}_primary_key_input`})
+            $(nullableCell).append(nullableSelect)
+            $(row).append(nullableCell)
+
+            let primaryKeyCell = createElement('td ', [])
+            let primaryKeySelect = createElement('select ', ['form-control '], {
+                id: `${rowId}_primary_key_input`
+            })
 
             let primaryKeyOptions = {
-                'true': "Yes",
-                'false': "No"
+                'true ': "Yes",
+                'false ': "No"
             }
 
             for (let primaryKeyOption of Object.keys(primaryKeyOptions)) {
-                let option = createElement('option', [], {
+                let option = createElement('option ', [], {
                     value: primaryKeyOption
                 })
                 option.textContent = primaryKeyOptions[primaryKeyOption];
-                
+
                 $(primaryKeySelect).append(option)
             }
             $(primaryKeyCell).append(primaryKeySelect)
             $(row).append(primaryKeyCell)
-            
-            $('#new-grouptable-modal .modal-body table tbody').append(row)
+
+            $('#new-grouptable-modal .modal-body table tbody ').append(row)
         }
-    
+
         feather.replace()
     }
 
@@ -359,8 +579,8 @@
         let tableName = $("#new-grouptable-name-input").val()
         let columns = []
 
-        $('#new-grouptable-modal .modal-body table tbody tr').each( (index, row) => {
-            let rowId = $(row).attr('id')
+        $('#new-grouptable-modal .modal-body table tbody tr ').each((index, row) => {
+            let rowId = $(row).attr('id ')
 
             let name = $(`#${rowId}_name_input`).val()
             let data_type = $(`#${rowId}_data_type_input`).val()
@@ -369,25 +589,23 @@
 
             let columnObject = {
                 name: name,
-                is_required: nullable === 'true',
+                is_required: nullable === 'true ',
                 data_type: data_type
             }
 
-            if (primary_key === 'true') {
-                columnObject['constraints'] = {
-                    'is_primary_key': true
+            if (primary_key === 'true ') {
+                columnObject['constraints '] = {
+                    'is_primary_key ': true
                 }
             }
 
             columns.push(columnObject)
-        } )
-        
-        DRAFT.tables.push(
-            {
-                name: tableName,
-                columns: columns
-            }
-        )
+        })
+
+        DRAFT.tables.push({
+            name: tableName,
+            columns: columns
+        })
 
         displayDraft()
     }
@@ -405,109 +623,115 @@
     function displayGroupObject(object, nameInputSelector, tablesAccordionContainer) {
         $(nameInputSelector).val(object.name)
 
-        $(tablesAccordionContainer).html('')
+        $(tablesAccordionContainer).html(' ')
 
         for (let table of object.tables) {
             let id = generateRandomId()
             let accordionHeaderId = `${id}_header`;
             let accordionBodyId = `${id}_body`;
 
-            let tableAccordionItem = createElement('div', ['accordion-item'])
+            let tableAccordionItem = createElement('div ', ['accordion-item '])
             $(tablesAccordionContainer).append(tableAccordionItem)
 
-            let tableAccordionHeader = createElement('h2', ['accordion-header'], 
-                {id: accordionHeaderId}
-            )
+            let tableAccordionHeader = createElement('h2 ', ['accordion-header '], {
+                id: accordionHeaderId
+            })
             $(tableAccordionItem).append(tableAccordionHeader)
-            
-            let tableAccordionButton = createElement('button', ['accordion-button'], {
-                'data-bs-target': `#${accordionBodyId}`, 'aria-expanded': false, 
-                'aria-controls': accordionBodyId, textContent: table.name
+
+            let tableAccordionButton = createElement('button ', ['accordion-button '], {
+                'data-bs-target ': `#${accordionBodyId}`,
+                'aria-expanded ': false,
+                'aria-controls ': accordionBodyId,
+                textContent: table.name
             })
             $(tableAccordionHeader).append(tableAccordionButton)
 
-            let tableAccordionBody = createElement('div', ['acordion-collapse', 'collapse', 'show'], 
-                {id: accordionBodyId, 'aria-labelledby': accordionHeaderId}
-            )
+            let tableAccordionBody = createElement('div ', ['acordion-collapse ', 'collapse ', 'show '], {
+                id: accordionBodyId,
+                'aria-labelledby ': accordionHeaderId
+            })
             $(tableAccordionItem).append(tableAccordionBody)
 
-            let tableAccordion = createElement('div', ['accordion-body'])
+            let tableAccordion = createElement('div ', ['accordion-body '])
             $(tableAccordionBody).append(tableAccordion)
 
-            let tableColumnTable = createElement('table', ['table', 'table-striped']) 
+            let tableColumnTable = createElement('table ', ['table ', 'table-striped '])
             $(tableAccordion).append(tableColumnTable)
 
             let tableColumnTableHead = createElementsRecursively({
-                tag: 'thead',
+                tag: 'thead ',
                 classes: [],
-                elements: [
-                    {
-                        tag: 'tr',
+                elements: [{
+                    tag: 'tr ',
+                    classes: [],
+                    elements: [{
+                        tag: 'th ',
                         classes: [],
-                        elements: [
-                            {
-                                tag: 'th',
-                                classes: [],
-                                attributes: {textContent: "Name"}
-                            },
-                            {
-                                tag: 'th',
-                                classes: [],
-                                attributes: {textContent: "Data type"}
-                            },
-                            {
-                                tag: 'th',
-                                classes: [],
-                                attributes: {textContent: "Nullable?"}
-                            },
-                            {
-                                tag: 'th',
-                                classes: [],
-                                attributes: {textContent: "Primary key"}
-                            }
-                        ]
-                    }
-                ]
+                        attributes: {
+                            textContent: "Name"
+                        }
+                    }, {
+                        tag: 'th ',
+                        classes: [],
+                        attributes: {
+                            textContent: "Data type"
+                        }
+                    }, {
+                        tag: 'th ',
+                        classes: [],
+                        attributes: {
+                            textContent: "Nullable?"
+                        }
+                    }, {
+                        tag: 'th ',
+                        classes: [],
+                        attributes: {
+                            textContent: "Primary key"
+                        }
+                    }]
+                }]
             })
 
             $(tableColumnTable).append(tableColumnTableHead)
 
-            let tableColumnTableBody = createElement('tbody', [], {});
+            let tableColumnTableBody = createElement('tbody ', [], {});
             $(tableColumnTable).append(tableColumnTableBody);
 
             for (let column of table.columns) {
                 let row = createElementsRecursively({
-                    tag: 'tr',
+                    tag: 'tr ',
                     classes: [],
-                    elements: [
-                        {
-                            tag: 'td',
-                            classes: [],
-                            attributes: {textContent: column.name}
-                        },
-                        {
-                            tag: 'td',
-                            classes: [],
-                            attributes: {textContent: column.data_type}
+                    elements: [{
+                        tag: 'td ',
+                        classes: [],
+                        attributes: {
+                            textContent: column.name
                         }
-                        ,
-                        {
-                            tag: 'td',
-                            classes: [],
-                            attributes: {textContent: column.is_required ? "No": "Yes"}
-                        },
-                        {
-                            tag: 'td',
-                            classes: [],
-                            attributes: {textContent: column.constraints && column.constraints.is_primary_key ? "Yes": "No"}
+                    }, {
+                        tag: 'td ',
+                        classes: [],
+                        attributes: {
+                            textContent: column.data_type
                         }
-                    ]
+                    }, {
+                        tag: 'td ',
+                        classes: [],
+                        attributes: {
+                            textContent: column.is_required ? "No" : "Yes"
+                        }
+                    }, {
+                        tag: 'td ',
+                        classes: [],
+                        attributes: {
+                            textContent: column.constraints && column.constraints.is_primary_key ? "Yes" : "No"
+                        }
+                    }]
                 })
 
                 $(tableColumnTableBody).append(row)
             }
         }
-    
+
     }
 
     function submitNewGroup() {
@@ -515,12 +739,12 @@
             type: "POST",
             url: `http://${location.host}${API_URL}/ferdolt/groups/`,
             headers: {
-                'X-CSRFTOKEN': getCookie("csrftoken")
+                'X-CSRFTOKEN ': getCookie("csrftoken")
             },
             data: JSON.stringify(DRAFT),
-            contentType: 'application/json',
+            contentType: 'application/json ',
             success: function(data) {
-                displayMessage("Group has been created successfully", ['alert', 'alert-success', 'alert-dismissible'])
+                displayMessage("Group has been created successfully", ['alert ', 'alert-success ', 'alert-dismissible '])
             },
             error: function(data) {
                 console.log(data.responseJSON)
