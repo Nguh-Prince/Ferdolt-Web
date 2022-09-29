@@ -655,11 +655,12 @@ def create_sequence_query(sequence_name, is_postgres_db=False, is_sqlserver_db=F
         """
     if is_postgres_db:
         return f"""
-        CREATE SEQUENCE {sequence_name} IF NOT EXISTS AS {data_type} START WITH {start} INCREMENT BY {increment} MINVALUE {minvalue} {'CYCLE' if cycle else ''} MAXVALUE {maxvalue}
+        CREATE SEQUENCE {sequence_name} IF NOT EXISTS AS {data_type} 
+        START WITH {start} INCREMENT BY {increment} MINVALUE {minvalue} {'CYCLE' if cycle else ''} MAXVALUE {maxvalue}
         """
 
 
-def create_datetime_column_with_default_now_query(table, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, column_name='last_updated'):
+def create_datetime_column_with_default_now_query(table, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, column_name='last_updated', use_timezone=False):
     """
     returns the query used to create a datetime column with default as the current time in the specified dbms
     """
@@ -668,8 +669,12 @@ def create_datetime_column_with_default_now_query(table, is_postgres_db=False, i
         return f"""
             IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table.name}' AND TABLE_SCHEMA = '{table.schema.name}' AND COLUMN_NAME = 'last_updated')
                 BEGIN
-                    ALTER TABLE {table.schema.name}.{table.name} ADD last_updated DATETIME2(3) DEFAULT CURRENT_TIMESTAMP;
+                    ALTER TABLE {table.schema.name}.{table.name} ADD last_updated DATETIME2(6) DEFAULT CURRENT_TIMESTAMP;
                 END
+        """
+    elif is_postgres_db:
+        return f"""
+        ALTER TABLE {table.get_queryname()} ADD last_updated DATETIME DEFAULT NOW() { "AT TIME ZONE 'UTC'" if use_timezone else '' }
         """
 
 def get_create_tracking_id_column_query(table, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, column_name='tracking_id', length=len(SERVER_ID) + 16):
@@ -796,16 +801,20 @@ def set_tracking_id_where_null_query_multiple_primary_keys(table, primary_key_co
             $$
         """
 
-def update_datetime_columns_to_now_query(table, column_name='last_updated', is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False):
+def update_datetime_columns_to_now_query(table, column_name='last_updated', is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, use_timezone=False):
     if is_sqlserver_db:
         return f"UPDATE {table.get_queryname()} SET {column_name}=CURRENT_TIMESTAMP"
     elif is_postgres_db:
-        return f"UPDATE {table.get_queryname()} SET {column_name}=NOW() AT TIME ZONE 'UTC'"
+        return f"""UPDATE {table.get_queryname()} SET {column_name}=NOW() { "AT TIME ZONE 'UTC'" if use_timezone else '' }"""
     else:
         raise NotSupported("We do not yet support the database you passed")
 
 
-def insert_update_delete_trigger_query( table, trigger_name, sequence_name, primary_key_columns, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, tracking_id_exists=True ):
+def insert_update_delete_trigger_query( 
+    table, trigger_name, sequence_name, 
+    primary_key_columns, is_postgres_db=False, is_mysql_db=False, 
+    is_sqlserver_db=False, tracking_id_exists=True, use_timezone=False 
+):
     primary_key_columns = [ f for f in table.column_set.filter(columnconstraint__is_primary_key=True) ]
     primary_key_column_names = [ f.name for f in primary_key_columns ]
 
@@ -883,6 +892,55 @@ def insert_update_delete_trigger_query( table, trigger_name, sequence_name, prim
                     EXEC (@SQL);
                 END
             END
+        """
+    
+    elif is_postgres_db:
+        def get_trigger_function_query(function_name: str):
+            return f"""
+                CREATE OR REPLACE function {function_name}() 
+                RETURNS trigger AS $$ 
+                DECLARE table_ids RECORD;
+                BEGIN
+                    IF (TG_OP = 'DELETE') THEN -- 
+                        BEGIN
+                            FOR table_ids in SELECT { ', '.join( primary_key_columns ) if not tracking_id_exists else 'tracking_id' } FROM DELETED LOOP
+                                INSERT INTO {table.schema.name}_{table.name}_deletion (row_tracking_id, deletion_time) 
+                                VALUES ( tables_ids.tracking_id, now() {"AT TIME ZONE 'UTC'" if use_timezone else ''} )
+                            END LOOP;
+                        END;
+                    END IF;
+                    
+                    ELSIF (TG_OP = 'UPDATE') THEN 
+                        BEGIN 
+                            UPDATE {table.get_queryname()} SET last_updated=CURRENT_TIMESTAMP WHERE 
+                            { ', '.join( primary_key_columns ) if not tracking_id_exists else 'tracking_id' } IN 
+                            (SELECT DISTINCT { ', '.join(primary_key_columns) if not tracking_id_exists else 'tracking_id' } FROM NEW);
+                        END;
+                    END IF;
+
+                    ELSIF (TG_OP = 'INSERT') THEN 
+                        FOR table_ids IN SELECT { ', '.join( primary_key_columns )} FROM NEW WHERE tracking_id IS NULL LOOP 
+                            UPDATE {table.get_queryname()} SET tracking_id = '{SERVER_ID}' || TO_CHAR( now(), 'yyyyMMddhhmmss' ) 
+                            || LPAD( CAST(nextval('{sequence_name}') AS VARCHAR), 2, '0 ) 
+                            WHERE { " AND ".join( [ f"{column}=table_ids.{column}" for column in primary_key_column_names ] ) }'
+                        END LOOP;
+                    END IF;
+
+                    RETURN NULL;
+                END;
+                $$ LANGUAGE plpgsql;
+            """
+        
+        function_name = f"{trigger_name}_function"
+        
+        return f"""
+        IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table.name}' AND TABLE_SCHEMA='{table.schema.name}' AND COLUMN_NAME='last_updated')
+            BEGIN
+                {get_trigger_function_query(function_name)}
+                CREATE TRIGGER {trigger_name} AFTER INSERT OR UPDATE OR DELETE ON {table.get_queryname()} 
+                FOR EACH ROW EXECUTE FUNCTION {function_name}();
+            END;
+        END IF;
         """
     else:
         raise NotSupported
