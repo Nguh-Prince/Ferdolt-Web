@@ -237,8 +237,6 @@ def get_column_datatype(is_postgres_db, is_sqlserver_db, is_mysql_db, data_type_
     return data_type_string
 
 def get_table_foreign_key_references(table: ferdolt_models.Table, connection=None):
-    is_postgres_db, is_sqlserver_db, is_mysql_db = False, False, False
-
     database = table.schema.database
 
     if not connection:
@@ -252,22 +250,32 @@ def get_table_foreign_key_references(table: ferdolt_models.Table, connection=Non
         query = None
 
         if dbms_booleans["is_sqlserver_db"]:
+            # select the table and column name of the referenced table as well as 
+            # the column name of the referencing column
             query = f"""
-                    select OBJECT_NAME(fks.referenced_object_id) table_name, 
-                    sc2.name schema_name, COL_NAME(fks.referenced_object_id, fc2.referenced_column_id) column_name, 
-                    COL_NAME(fks.parent_object_id, fc.parent_column_id) referencing_column 
-                    FROM sys.foreign_keys fks 
-                    LEFT JOIN sys.tables tab ON referenced_object_id = tab.object_id 
-                    LEFT JOIN sys.schemas sc2 ON tab.schema_id = sc2.schema_id 
-                    LEFT JOIN sys.foreign_key_columns fc ON fks.object_id = fc.constraint_object_id 
-                    LEFT JOIN sys.foreign_key_columns fc2 ON fks.object_id = fc2.constraint_object_id
-                    WHERE fks.parent_object_id=object_id('{table.schema.name}.{table.name}')
+                select OBJECT_NAME(fks.referenced_object_id) table_name, 
+                sc2.name schema_name, COL_NAME(fks.referenced_object_id, fc2.referenced_column_id) column_name, 
+                COL_NAME(fks.parent_object_id, fc.parent_column_id) referencing_column 
+                FROM sys.foreign_keys fks 
+                LEFT JOIN sys.tables tab ON referenced_object_id = tab.object_id 
+                LEFT JOIN sys.schemas sc2 ON tab.schema_id = sc2.schema_id 
+                LEFT JOIN sys.foreign_key_columns fc ON fks.object_id = fc.constraint_object_id 
+                LEFT JOIN sys.foreign_key_columns fc2 ON fks.object_id = fc2.constraint_object_id
+                WHERE fks.parent_object_id=object_id('{table.schema.name}.{table.name}')
             """
         elif dbms_booleans['is_postgres_db']:
             query = f"""
-            
+            SELECT ccu.table_name as table_name, ccu.table_schema as schema_name, ccu.column_name as column_name,
+            kcu.column_name referencing_column  
+            from information_schema.table_constraints as tc 
+            JOIN information_schema.key_column_usage as kcu 
+                on tc.constraint_name=kcu.constraint_name and tc.table_schema = kcu.table_schema 
+            JOIN information_schema.constraint_column_usage as ccu 
+                ON ccu.constraint_name=tc.constraint_name AND ccu.table_schema=tc.table_schema 
+            WHERE tc.constraint_type='FOREIGN KEY' AND tc.table_name='{table.name}' 
+                AND tc.table_schema='{table.schema.name}'
             """
-            pass
+
         if query:
             rows = cursor.execute(query)
             columns = [ column[0] for column in cursor.description ]
@@ -645,6 +653,10 @@ def create_sequence_query(sequence_name, is_postgres_db=False, is_sqlserver_db=F
             CREATE SEQUENCE {sequence_name} AS {data_type} START WITH {start} INCREMENT BY {increment} MINVALUE {minvalue} { 'CYCLE' if cycle else '' } MAXVALUE {maxvalue}
         END    
         """
+    if is_postgres_db:
+        return f"""
+        CREATE SEQUENCE {sequence_name} IF NOT EXISTS AS {data_type} START WITH {start} INCREMENT BY {increment} MINVALUE {minvalue} {'CYCLE' if cycle else ''} MAXVALUE {maxvalue}
+        """
 
 
 def create_datetime_column_with_default_now_query(table, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, column_name='last_updated'):
@@ -670,6 +682,10 @@ def get_create_tracking_id_column_query(table, is_postgres_db=False, is_mysql_db
             BEGIN
                 ALTER TABLE {table.schema.name}.{table.name} ADD {column_name} VARCHAR({length});
             END
+        """
+    elif is_postgres_db:
+        return f"""
+        ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS {column_name} VARCHAR({length})
         """
 
 def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column, sequence_name, server_id, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, column_name='tracking_id', primary_key_column_data_type='int'):
@@ -702,6 +718,23 @@ def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column
                 END
         """
 
+    elif is_postgres_db:
+        return f"""
+            DO $$ 
+            DECLARE table_ids RECORD;
+            BEGIN
+                IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table_name}' AND TABLE_SCHEMA='{schema_name}' AND COLUMN_NAME='{column_name}') 
+                    BEGIN
+                        FOR table_ids IN SELECT {primary_key_column} FROM {schema_name}.{table_name} WHERE tracking_id IS NULL 
+                            UPDATE {schema_name}.{table_name} SET {column_name} = '{server_id}' || to_char( now(), 'yyyyMMddhhmmss' ) 
+                            || LPAD( CAST( nextval({sequence_name}) AS VARCHAR ), 2, '0' ) 
+                            WHERE {primary_key_column} = table_ids.{primary_key_column};
+                        END LOOP;
+                    END;
+                END IF;
+            END;
+            $$
+        """
 def get_column_type_and_precision(column) -> str:
     string = f"{column.name} "
     type = column.data_type
@@ -744,11 +777,33 @@ def set_tracking_id_where_null_query_multiple_primary_keys(table, primary_key_co
         END
         """
 
+    elif is_postgres_db:
+        return f"""
+            DO $$ 
+            DECLARE table_ids RECORD;
+            BEGIN
+                IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table_name}' AND TABLE_SCHEMA='{schema_name}' AND COLUMN_NAME='{column_name}') 
+                    BEGIN
+                        FOR table_ids IN SELECT { ', '.join( [f"{column.name}" for column in primary_key_columns] ) } 
+                        FROM {schema_name}.{table_name} WHERE {column_name} IS NULL 
+                            UPDATE {schema_name}.{table_name} SET {column_name} = '{server_id}' || to_char( now(), 'yyyyMMddhhmmss' ) 
+                            || LPAD( CAST( nextval({sequence_name}) AS VARCHAR ), 2, '0' ) 
+                            WHERE { " AND ".join( [ f"{column.name} = table_ids.{column.name}" for column in primary_key_columns ] ) };
+                        END LOOP;
+                    END;
+                END IF;
+            END;
+            $$
+        """
+
 def update_datetime_columns_to_now_query(table, column_name='last_updated', is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False):
     if is_sqlserver_db:
         return f"UPDATE {table.get_queryname()} SET {column_name}=CURRENT_TIMESTAMP"
+    elif is_postgres_db:
+        return f"UPDATE {table.get_queryname()} SET {column_name}=NOW() AT TIME ZONE 'UTC'"
     else:
-        raise NotSupported
+        raise NotSupported("We do not yet support the database you passed")
+
 
 def insert_update_delete_trigger_query( table, trigger_name, sequence_name, primary_key_columns, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, tracking_id_exists=True ):
     primary_key_columns = [ f for f in table.column_set.filter(columnconstraint__is_primary_key=True) ]
