@@ -6,6 +6,7 @@ from django.utils.translation import gettext as _
 import psycopg
 import pyodbc
 
+from common.functions import is_valid_hostname
 from core.functions import decrypt, encrypt, initialize_database
 
 from ferdolt_web import settings
@@ -80,8 +81,13 @@ class DatabaseSerializer(serializers.ModelSerializer):
         return data
 
     def validate_host(self, data):
-        data = encrypt(data)[1]
-        return data
+        if is_valid_hostname(data):
+            data = encrypt(data)[1]
+            return data
+        else:
+            raise serializers.ValidationError(
+                _("%(ip)s is not a valid host name or ip address" % { 'ip': data })
+            )
 
     def validate_port(self, data):
         data = encrypt(data)[1]
@@ -156,6 +162,34 @@ class DatabaseDetailSerializer(DatabaseSerializer):
         fields = ( "id", "name", "username", 
         "password", 'host', 'port', 'schemas', 
         'dbms_version', 'instance_name' )
+
+class UpdateDatabaseSerializer(serializers.Serializer):
+    username = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True)
+    host = serializers.CharField(write_only=True)
+    port = serializers.CharField(write_only=True)
+    name = serializers.CharField(write_only=True)
+
+    def validate_username(self, data):
+        data = encrypt(data)[1]
+        return data
+
+    def validate_password(self, data):
+        data = encrypt(data)[1]
+        return data
+
+    def validate_host(self, data):
+        if is_valid_hostname(data):
+            data = encrypt(data)[1]
+            return data
+        else:
+            raise serializers.ValidationError(
+                _("%(ip)s is not a valid host name or ip address" % { 'ip': data })
+            )
+
+    def validate_port(self, data):
+        data = encrypt(data)[1]
+        return data
 
 class DatabaseSchemaSerializer(serializers.ModelSerializer):
     class SchemaTables(serializers.ModelSerializer):

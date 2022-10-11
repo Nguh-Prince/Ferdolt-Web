@@ -21,6 +21,69 @@
         <link href="{% static 'frontend/assets/css/icons.min.css' %}" rel="stylesheet" type="text/css" />
         <link href="{% static 'frontend/assets/css/app.min.css' %}" rel="stylesheet" type="text/css" />
 
+        <style>
+            :root {
+                --accent: #FD5618;
+                --accent-transparent: #fd56812f;
+            }
+            .btn-primary, .btn-primary:hover, .btn-primary:focus {
+                background-color: var(--accent);
+                border-color: var(--accent);
+            }
+            .left-sidenav-menu li.mm-active .nav-item.active a.nav-link.active {
+                background-color: transparent;
+                color: var(--accent);
+            }
+            .left-sidenav-menu li>a.active .menu-icon {
+                color: var(--accent);
+                fill: var(--accent-transparent);
+            }
+    
+            .left-sidenav-menu li:hover, .left-sidenav-menu li:hover .menu-icon, .left-sidenav-menu li:hover>a {
+                color: var(--accent);
+                fill: var(--accent-transparent);
+            }
+    
+            .page-wrapper {
+                overflow-x: scroll;
+            }
+            
+            .top-bar {
+                margin-top: 64px;
+            }
+            
+            .cd-accordion {
+                background-color: white;
+            }
+            
+            .cd-accordion__label {
+                background-color: white;
+                color: var(--cd-color-1);
+            }
+            
+            .cd-accordion__label:hover {
+                color: white;
+            }
+            
+            #messages.active {
+                z-index: 1300;
+            }
+    
+            .small-icon {
+                height: 16px;
+                width: 16px;
+            }
+    
+            .small-icon:hover {
+                cursor: pointer;
+            }
+
+            .nav-border .nav-item.show .nav-link, .nav-border .nav-link.active {
+                color: var(--accent);
+                border-bottom: 2px solid var(--accent);
+            }
+        </style>
+
     </head>
 
     <body class="account-body accountbg">
@@ -34,8 +97,8 @@
                             <div class="card">
                                 <div class="card-body p-0 auth-header-box">
                                     <div class="text-center p-3">
-                                        <a href="index.html" class="logo logo-admin">
-                                            <img src="{% static 'frontend/assets/images/logo-sm-dark.png' %}" height="50" alt="logo" class="auth-logo">
+                                        <a class="logo logo-admin">
+                                            <img src="{% static 'frontend/assets/images/logo-sm.png' %}" height="50" alt="logo" class="auth-logo">
                                         </a>
                                         <p class="text-muted  mb-0">Sign in to continue to DoDB.</p>  
                                     </div>
@@ -67,13 +130,13 @@
                     
                                                 <div class="form-group row my-3">
                                                     <div class="col-sm-6">
-                                                        <div class="custom-control custom-switch switch-success">
+                                                        <!-- <div class="custom-control custom-switch switch-success">
                                                             <input type="checkbox" class="custom-control-input" id="customSwitchSuccess">
                                                             <label class="form-label text-muted" for="customSwitchSuccess">Remember me</label>
-                                                        </div>
+                                                        </div> -->
                                                     </div><!--end col--> 
                                                     <div class="col-sm-6 text-end">
-                                                        <a href="auth-recover-pw.html" class="text-muted font-13"><i class="dripicons-lock"></i> Forgot password?</a>                                    
+                                                        <a href="auth-recover-pw.html" class="text-muted font-13"><i data-feather="lock"></i> Forgot password?</a>                                    
                                                     </div><!--end col--> 
                                                 </div><!--end form-group--> 
                     

@@ -140,7 +140,7 @@ class DatabaseSchema(models.Model):
 
     @property
     def normal_tables(self, *args, **kwargs):
-        return self.table_set.filter( ~Q(id__in=Table.objects.filter(deletion_table__isnull=False)
+        return self.table_set.filter( ~Q(id__in=self.table_set.filter(deletion_table__isnull=False)
                                                              .values("deletion_table__id")) )
 
 class Table(models.Model):
@@ -233,6 +233,10 @@ class ColumnConstraint(models.Model):
     is_primary_key: bool = models.BooleanField(default=False)
     is_foreign_key: bool = models.BooleanField(default=False)
     references: Column = models.ForeignKey(Column, null=True, on_delete=models.SET_NULL, related_name='references', blank=True)
+    references_tracking_id: Column = models.ForeignKey(
+        Column, null=True, on_delete=models.SET_NULL, 
+        related_name='references_tracking_id', blank=True 
+    )
     history = HistoricalRecords()
 
     class Meta:

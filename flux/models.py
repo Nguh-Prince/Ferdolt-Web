@@ -14,20 +14,8 @@ class File(models.Model):
     is_deleted = models.BooleanField(default=False)
     last_modified_time = models.DateTimeField(null=True)
     hash = models.TextField( null=True, blank=True )
+    password = models.TextField( null=True )
     history = HistoricalRecords()
-
-    # def save(self, *args, **kwargs):
-    #     file_path = self.file.path
-
-    #     try: 
-    #         with open( file_path ) as __:
-    #             content = __.read()
-    #             self.hash = sha256( content.encode('utf-8') ).hexdigest()
-
-    #     except FileNotFoundError as e:
-    #         logging.error(f"Couldn't set hash for {file_path} because the file was not found")
-        
-    #     return super().save(*args, **kwargs)
 
     def get_file_hash(self, *args, **kwargs):
         file_path = self.file.path

@@ -20,8 +20,9 @@ from django.utils.translation import gettext as _
 from django.utils import timezone
 
 from common.viewsets import MultipleSerializerViewSet
-from core.functions import (get_database_connection, get_database_details, 
+from core.functions import (decrypt, get_database_connection, get_database_details, 
                             get_dbms_booleans, initialize_database, synchronize_database)
+from ferdolt import tasks
 from ferdolt_web.settings import FERNET_KEY
 
 from flux import models as flux_models
@@ -55,6 +56,7 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     serializer_classes = {
         'retrieve': serializers.DatabaseDetailSerializer,
         'refresh': serializers.DatabaseDetailSerializer,
+        'update': serializers.UpdateDatabaseSerializer
     }
 
     def get_queryset(self):
@@ -91,6 +93,27 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
         return Response( data=data )
 
+    def update(self, request, *args, **kwargs):
+        database = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        validated_data = serializer.validated_data
+
+        query = models.Database.objects.filter(~Q(id=database.id) & Q(name=serializer.validated_data['name']))
+
+        for _db in query:
+            if _db.get_host == decrypt( validated_data['host'] ) and _db.get_port == decrypt( validated_data['port'] ):
+                raise serializers.ValidationError(_("There is already a database named %(name)s on %(host)s:%(port)s" % {
+                    'name': _db.name, 'port': _db.get_port
+                }))
+
+        query = models.Database.objects.filter( id=database.id )
+
+        query.update(**validated_data)
+
+        return Response( data=serializers.DatabaseSerializer( database ).data )
+
     @action(
         methods=["POST"], detail=True
     )
@@ -98,9 +121,7 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         db: models.Database = self.get_object()
 
         try:
-            initialize_database(db)
-            db.is_initialized = True
-            db.save()
+            tasks.initialize_database(db.id)
         except InvalidDatabaseStructure as e:
             logging.error(f"InvalidDatabaseStructure error raised when initializeing {db.__str__()}")
             return Response(data={'message': _("The target database has one or more target tables without primary key fields. Please add them and try again")}, status=status.HTTP_400_BAD_REQUEST)
@@ -112,6 +133,7 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
             return Response( data={'message': _("We could not connect to the %(database)s database. Please ensure that your server is running and your credentials are correct" % {'database': db.__str__()})} )
 
         return Response(data={'message': _("The %(database)s was initialized successfully." % {'database': db.__str__()})})
+    
     @action(
         methods=["POST"], detail=True
     )

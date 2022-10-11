@@ -6,6 +6,7 @@ from cryptography import fernet
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
@@ -95,11 +96,10 @@ class GroupDatabase(models.Model):
             self.synchronization_frequency = 1
 
         if 'force_insert' in kwargs:
+            super().save(*args, **kwargs)
             # create GroupDatabaseSynchronizations for every GroupExtraction of this group
             for extraction in self.groupextraction_set.filter(~Q(groupdatabasesynchronization__group_database=self)):
                 GroupDatabaseSynchronization.objects.create(group_database=self, extraction=extraction)
-
-        return super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("Group database")

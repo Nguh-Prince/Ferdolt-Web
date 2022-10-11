@@ -26,34 +26,64 @@
     <script src="{% static 'frontend/assets/js/jquery.min.js' %}"></script>
 
     <style>
+        :root {
+            --accent: #FD5618;
+            --accent-transparent: #fd56812f;
+        }
+        .btn-primary, .btn-primary:hover, .btn-primary:focus {
+            background-color: var(--accent);
+            border-color: var(--accent);
+        }
+        .left-sidenav-menu li.mm-active .nav-item.active a.nav-link.active {
+            background-color: transparent;
+            color: var(--accent);
+        }
+        .left-sidenav-menu li>a.active .menu-icon {
+            color: var(--accent);
+            fill: var(--accent-transparent);
+        }
+
+        .left-sidenav-menu li:hover, .left-sidenav-menu li:hover .menu-icon, .left-sidenav-menu li:hover>a {
+            color: var(--accent);
+            fill: var(--accent-transparent);
+        }
+
         .page-wrapper {
             overflow-x: scroll;
         }
-
+        
         .top-bar {
             margin-top: 64px;
         }
-
+        
         .cd-accordion {
             background-color: white;
         }
-
+        
         .cd-accordion__label {
             background-color: white;
             color: var(--cd-color-1);
         }
-
+        
         .cd-accordion__label:hover {
             color: white;
         }
-
+        
         #messages.active {
             z-index: 1300;
         }
+
+        .small-icon {
+            height: 16px;
+            width: 16px;
+        }
+
+        .small-icon:hover {
+            cursor: pointer;
+        }
     </style>
 
-    {% block extra_styles %}
-    {% endblock %}
+    {% block extra_styles %} {% endblock %}
 </head>
 
 <body>
@@ -76,9 +106,7 @@
             <ul class="metismenu left-sidenav-menu">
                 <li class="menu-label mt-0">Main</li>
                 <li>
-                    <a href="javascript: void(0);"> <i data-feather="home"
-                            class="align-self-center menu-icon"></i><span>{% trans "Dashboard" %}</span><span
-                            class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
+                    <a href="javascript: void(0);"> <i data-feather="home" class="align-self-center menu-icon"></i><span>{% trans "Dashboard" %}</span><span class="menu-arrow"><i class="mdi mdi-chevron-right"></i></span></a>
                     <ul class="nav-second-level" aria-expanded="false">
                         <li class="nav-item"><a class="nav-link" href="{% url 'frontend:index' %}"><i
                                     class="ti-control-record"></i>{% trans "Statistics" %}</a></li>
@@ -98,13 +126,15 @@
                     </ul>
                 </li>
 
-                <!-- <li class="nav-item"><a class="nav-link" href="{% url 'frontend:servers' %}"><i
-                            data-feather="hard-drive" class="align-self-center menu-icon"></i>{% trans "Servers" %}</a>
-                </li> -->
+                <li class="nav-item">
+                    <a href="{% url 'frontend:groups' %}">
+                       <i data-feather="refresh-cw" class="align-self-center menu-icon"></i> {% trans "Synchronization groups" %}
+                    </a>
+                </li>
 
                 <li>
                     <a href="javascript: void(0)">
-                        <i data-feather="filter" class="align-self-center menu-icon"></i>
+                        <i data-feather="activity" class="align-self-center menu-icon"></i>
                         <span>Activities</span>
                     </a>
 
@@ -136,9 +166,7 @@
             <nav class="navbar-custom">
                 <ul class="list-unstyled topbar-nav float-end mb-0">
                     <li class="dropdown hide-phone">
-                        <a class="nav-link dropdown-toggle arrow-none waves-light waves-effect"
-                            data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="false"
-                            aria-expanded="false">
+                        <a class="nav-link dropdown-toggle arrow-none waves-light waves-effect" data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="false" aria-expanded="false">
                             <!-- <i data-feather="search" class="topbar-icon"></i> -->
                         </a>
 
@@ -147,8 +175,7 @@
                             {% if 1 %}
                             <div class="app-search-topbar">
                                 <form action="#" method="get">
-                                    <input type="search" name="search" class="from-control top-search mb-0"
-                                        placeholder="Type text...">
+                                    <input type="search" name="search" class="from-control top-search mb-0" placeholder="Type text...">
                                     <button type="submit"><i class="ti-search"></i></button>
                                 </form>
                             </div>
@@ -158,16 +185,13 @@
 
                     {% if notifications %}
                     <li class="dropdown notification-list">
-                        <a class="nav-link dropdown-toggle arrow-none waves-light waves-effect"
-                            data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="false"
-                            aria-expanded="false">
+                        <a class="nav-link dropdown-toggle arrow-none waves-light waves-effect" data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="false" aria-expanded="false">
                             <i data-feather="bell" class="align-self-center topbar-icon"></i>
                             <span class="badge bg-danger rounded-pill noti-icon-badge">2</span>
                         </a>
                         <div class="dropdown-menu dropdown-menu-end dropdown-lg pt-0">
 
-                            <h6
-                                class="dropdown-item-text font-15 m-0 py-3 border-bottom d-flex justify-content-between align-items-center">
+                            <h6 class="dropdown-item-text font-15 m-0 py-3 border-bottom d-flex justify-content-between align-items-center">
                                 Notifications <span class="badge bg-primary rounded-pill">2</span>
                             </h6>
                             <div class="notification-menu" data-simplebar>
@@ -267,9 +291,7 @@
 
                     <li class="dropdown">
                         <div class="d-flex flex-row align-items-center px-3">
-                            <a class="nav-link dropdown-toggle waves-effect waves-light nav-user"
-                                data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="false"
-                                aria-expanded="false">
+                            <a class="nav-link dropdown-toggle waves-effect waves-light nav-user" data-bs-toggle="dropdown" href="#" role="button" aria-haspopup="false" aria-expanded="false">
                                 <span class="ms-1 nav-user-name hidden-sm">{{ request.user.username }}</span>
                             </a>
                             <a href="{% url 'frontend:logout' %}">
@@ -297,8 +319,7 @@
 
                         <nav style="--bs-breadcrumb-divider: '>';" aria-label="breadcrumb">
                             <ol class="breadcrumb h-100 align-items-center">
-                                {% block breadcrumbs %}
-                                {% endblock %}
+                                {% block breadcrumbs %} {% endblock %}
                             </ol>
                         </nav>
                     </li>
@@ -307,22 +328,15 @@
             <!-- end navbar-->
         </div>
         <!-- Top Bar End -->
-        <div id="messages" style="position: absolute; top: 0; width: 50%; margin-left: 25%;"
-            class="container py-3 px-3 {% block message_active %}{% endblock %}">
-            {% block messages %}
-            {% endblock %}
+        <div id="messages" style="position: absolute; top: 0; width: 50%; margin-left: 25%;" class="container py-3 px-3 {% block message_active %}{% endblock %}">
+            {% block messages %} {% endblock %}
         </div>
         <div class="page-content">
-            {% block tabs %}
-            {% endblock %}
-            {% block page_content %}
-
-            {% endblock %}
+            {% block tabs %} {% endblock %} {% block page_content %} {% endblock %}
         </div>
     </div>
 
-    {% block modals %}
-    {% endblock %}
+    {% block modals %} {% endblock %}
 
     </div>
 
@@ -353,6 +367,7 @@
     }
 
     const API_BASE_URL = 'api/'
+    const API_URL = "/api"
 
     function toggleMessages() {
         $("#messages").toggleClass('active')

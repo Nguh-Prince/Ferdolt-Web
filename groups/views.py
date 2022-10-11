@@ -46,7 +46,8 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         'link_columns': serializers.LinkColumnsToGroupColumnsSerializer,
         'list': serializers.GroupDisplaySerializer,
         'retrieve': serializers.GroupDetailSerializer,
-        'synchronization_group': serializers.SynchronizationGroupSerializer
+        'synchronization_group': serializers.SynchronizationGroupSerializer,
+        'add_database': serializers.AddDatabaseToGroupSerializer
     }
 
     def get_queryset(self):
@@ -82,7 +83,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                     latest_extraction_query = models.GroupExtraction.objects.order_by('-extraction__time_made')
 
                     if latest_extraction_query.exists():
-                        start_time = latest_extraction_query.first().time_made
+                        start_time = latest_extraction_query.first().extraction.time_made
                     else: 
                         start_time = None
 
@@ -516,6 +517,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                 
                 group_databases.append(group_database)
 
+            # getting the non-deletion tables from the source databases
             for table in ferdolt_models.Table.objects.filter(
                 Q(schema__database__in=source_databases_set) & 
                 ~Q(id__in=ferdolt_models.Table.objects.filter(deletion_table__isnull=False)
@@ -538,14 +540,11 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                         group_table = models.GroupTable.objects.get(name=group_table_name, group=group)
                         models.GroupTableTable.objects.create(group_table=group_table, table=table)
                         logging.info(f"Linking the {table} table to the {group_table} table")
-                    except models.Group.DoesNotExist as e:
+                    except models.GroupTable.DoesNotExist as e:
                         logging.error(f"Error when creating full synchronization group. Error: {str(e)}")
 
                         if table_database in source_databases_set:
                             return get_error_response()
-                
-                # link the database table to the group table
-                models.GroupTableTable.objects.create(group_table=group_table, table=table)
 
                 # query to get the columns that are in this table but not in the group
                 table_columns_query = table_columns.filter( ~Q(name__in=group_table.columns.values("name")) )
@@ -587,3 +586,27 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
             return Response( serializers.GroupDetailSerializer(group).data, status=status.HTTP_201_CREATED)
         else:
             pass
+
+    @action(
+        methods=["POST"],
+        detail=True
+    )
+    def add_database(self, request, *args, **kwargs):
+        group = self.get_object()
+        
+        serializer = self.get_serializer(request.data)
+        serializer.is_valid(raise_exception=True)
+
+        validated_data = serializer.validated_data
+
+        database = validated_data.pop('database')
+        
+        validated_data.pop('database_object')
+
+        group_database = models.GroupDatabase.objects.create(
+            database=database, **validated_data
+        )
+
+        return Response(
+            data=serializers.GroupDatabaseSerializer(group_database).data
+        )

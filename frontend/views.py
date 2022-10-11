@@ -1,13 +1,13 @@
 from datetime import timedelta
-import io
 import json
-import re
+import logging
 import urllib
 
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.db.models import Count, F, Max, Sum
 from django.db.models.functions import Coalesce
 from django.http import FileResponse, HttpResponseRedirect
@@ -15,16 +15,19 @@ from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
+import psycopg
+import pyodbc
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.functions import ( get_database_connection, initialize_database )
+
 from ferdolt import models as ferdolt_models
+from ferdolt import tasks as ferdolt_tasks
 from flux import models as flux_models
 from groups import models as groups_models
-
-from core.functions import ( get_column_datatype, get_database_connection, 
-sql_server_regex, postgresql_regex )
 
 def get_file_size_and_unit(size, number_of_decimal_places=2):
     return_size = size
@@ -279,8 +282,11 @@ def databases(request, id: int=None):
             extractions = flux_models.ExtractionSourceDatabase.objects.filter(
                 database=database
             ).distinct()
-
-            connection = get_database_connection(database)
+            try:
+                connection = get_database_connection(database)
+            except (pyodbc.OperationalError, psycopg.OperationalError) as e:
+                logging.error(f"Error connecting the {database.__str__()} database. Error: {str(e)}")
+                connection = None
 
             context['database'] = database
             context['pending_synchronizations'] = pending_synchronizations
@@ -291,6 +297,35 @@ def databases(request, id: int=None):
             databases = databases.filter( dbms_version=database.dbms_version )
 
     return render(request, "frontend/databases.html", context=context)
+
+@login_required
+def initialize(request, id: int):
+    query = ferdolt_models.Database.objects.filter(id=id)
+    
+    if not query.exists():
+        return redirect("frontend:not_found")
+    
+    else:
+        # try to connect to the database
+        database: ferdolt_models.Database = query.first()
+
+        ferdolt_tasks.initialize_database(database.id)
+
+        return redirect(f"/databases/{id}")
+
+@login_required
+def delete_database(request, id: int):
+    query = ferdolt_models.Database.objects.filter(id=id).first()
+
+    if not query:
+        return redirect("frontend:not_found")
+
+    else:
+        database: ferdolt_models.Database = query
+
+        database.delete()
+
+        return redirect("frontend:databases")
 
 def not_found(request):
     return render(request, "frontend/auth-404.html")
@@ -356,6 +391,7 @@ def groups(request, id: int=None):
         context['group'] = group
         context['group_databases'] = group.groupdatabase_set.all()
         context['databases'] = ferdolt_models.Database.objects.all()
+        context['dbms_versions'] = ferdolt_models.DatabaseManagementSystemVersion.objects.all()
 
     return render(request, "frontend/groups.html", context=context)
 

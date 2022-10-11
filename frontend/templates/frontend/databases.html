@@ -1,6 +1,10 @@
 {% extends 'frontend/base-template.html' %} {% load i18n static %} {% block title %}DoDB | {% trans 'Databases' %}{% endblock %} {% block breadcrumbs %} {% if database %}
 <li class="breadcrumb-item"><a href="{% url 'frontend:databases' %}">{% trans "Databases" %}</a></li>
-<li class="breadcrumb-item active" aria-current="page">{{database.name}}</li>
+<li class="breadcrumb-item active" aria-current="page">{{database.name}}
+    <span class="mx-2">
+        <i class="small-icon mx-1" data-bs-target="#database-detail-modal" data-bs-toggle="modal" data-feather="edit"></i> <i data-bs-target="#delete-database-confirmation" data-bs-toggle="modal" data-feather="trash" class="small-icon text-danger mx-1"></i>
+    </span>
+</li>
 {% else %}
 <li class="breadcrumb-item active"><a href="#">{% trans "Databases" %}</a></li>
 {% endif %} {% endblock %} {% block extra_styles %}
@@ -115,9 +119,9 @@
                 </span>
             </div>
             <div class="row">
-                <button class="btn btn-outline-danger" data-database-id="{{database.id}}">
+                <a href="{% url 'frontend:initialize-database' database.id %}" class="btn btn-outline-danger" data-database-id="{{database.id}}">
                     <i data-feather="refresh-cw"></i> {% trans "Initialize database" %}
-                </button>
+                </a>
             </div>
             {% endif %}
 
@@ -272,6 +276,87 @@
         </div>
     </div>
 </div>
+
+<div class="modal" id="delete-database-confirmation">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">
+                    {% blocktrans with database as str %}Are you sure you want to delete the {{ str }} database{% endblocktrans %}
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button data-bs-dismiss="modal" class="btn btn-primary">{% trans "No" %}</button>
+                <a href="{% url 'frontend:delete-database' database.id %}" class="btn btn-danger">{% trans "Yes" %}</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="database-detail-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{{ database }}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="database-name">{% trans "Database name" %}</label>
+                    <input type="text" name="database-name" id="database-name" required class="form-control" value="{{ database.name }}">
+                </div>
+
+                <div class="mb-3">
+                    <label for="database-dbms-version">{% trans "DBMS version" %}</label>
+                    <select id="database-dbms-version" class="form-select">
+                        {% for version in dbms_versions %}
+                        <option value="{{ version.id }}" 
+                            data-version-number="{{version.version_number}}"
+                            data-dbms-name="{{version.}}"
+                            {% if version == database.version %}
+                            selected
+                            {% endif %}
+                        >{{ version }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="database-instance-name">{% trans "Instance name" %}</label>
+                    <input id="database-instance-name" value="{{ database.instance_name }}" class="form-control" />
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-8">
+                        <label for="database-host">{% trans "Host" %}</label>
+                        <input type="text" class="form-control" id="database-host" value="{{ database.get_host }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="database-port">{% trans "Port" %}</label>
+                        <input type="number" id="database-port" class="form-control" value="{{ database.get_port }}">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="database-username">{% trans "Username" %}</label>
+                        <input type="text" class="form-control" id="database-username" value="{{ database.get_username }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="database-password">{% trans "Password" %}</label>
+                        <input type="password" id="database-password" class="form-control" value="{{ database.get_password }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submit-database-form">{% trans "Modify" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% else %}
 <div class="modal" id="new-database-modal" tabindex="-1">
     <div class="modal-dialog">
@@ -407,6 +492,10 @@
 
         populateSynchronizeDatabaseseModalTable()
     }
+
+    $("#delete-databases-button").click(() => {
+        deleteSelectedDatabases()
+    })
 
     function populateSynchronizeDatabaseseModalTable() {
         $("#synchronize-databases-modal tbody").html('')
@@ -653,12 +742,15 @@
                 let flag = false;
 
                 for (let server of state.databases) {
-                    if (server.id == data.id)
+                    if (server.id == data.id) {
                         flag = true;
+                    }
                 }
 
                 if (!flag) {
-
+                    // add the database to the list of databases
+                    state.databases.push(data)
+                    displayDatabase(data)
                 }
             },
             error: function(data) {
@@ -671,7 +763,41 @@
                 }
             }
         })
+    }
 
+    function deleteSelectedDatabases() {
+        SELECTED_DATABASES.forEach((selectedDatabase) => {
+            deleteDatabase(selectedDatabase.id)
+        })
+    }
+
+    function deleteDatabase(databaseID) {
+        $.ajax({
+            type: "DELETE",
+            url: `http://${location.host}${API_URL}/ferdolt/databases/${databaseID}/`,
+            headers: {
+                "X-CSRFTOKEN": getCsrfTokenCookie()
+            },
+            success: function(data) {
+                state.databases = state.databases.filter((item) => {
+                    if (item.id == databaseID) {
+                        displayMessage(`Successfully deleted the ${item.name} database on ${item.clear_host}`, ["alert-success", "alert-dismissible"])
+                        return false;
+                    }
+                    return item.id != databaseID;
+                })
+
+                SELECTED_DATABASES = SELECTED_DATABASES.filter((item) => {
+                    return item.id != databaseID;
+                })
+
+                displayDatabases()
+                displaySynchronizeDatabasesButton()
+            },
+            error: function(data) {
+                displayRequestErrors(data)
+            }
+        })
     }
 
     $("#create-group-from-databases").click(
@@ -723,17 +849,50 @@
 {% endif %} {% if database %}
 <script>
     var NUMBER_OF_SELECTED_TABLES = 0;
-    const DATABASE_ID = {
-        {
-            database.id
-        }
-    }
+    const DATABASE_ID = {{ database.id }}
 
     $("#empty-new-extraction-start-time").click(() => {
         console.log("Clicked the bspc button")
         $('#new-extraction-start-time').val('')
         $('#new-extraction-start-time-display').val('')
     })
+
+    $("#submit-database-form").click( () => {
+        console.log("Clicked the modify database button")
+        modifyDatabase()
+    } )
+
+    document.querySelector("#submit-database-form").addEventListener('click', () => {
+        console.log("Clicked the modify database button, vanilla JS event listener.")
+    })
+
+    function modifyDatabase() {
+        let formData = {
+            dbms_version: $("#database-dbms-version").val(),
+            instance_name: $("#database-instance-name").val(),
+            name: $("#database-name").val(),
+            host: $("#database-host").val(),
+            port: $("#database-port").val(),
+            username: $("#database-username").val(),
+            password: $("#database-password").val()
+        }
+
+        $.ajax({
+            type: "PUT",
+            url: `http://${location.host}${API_URL}/ferdolt/databases/{{ database.id }}/`,
+            data: JSON.stringify(formData),
+            headers: {
+                "X-CSRFTOKEN": getCsrfTokenCookie()
+            },
+            contentType: "application/json",
+            success: function(data) {
+                displayMessage("Database modified successfully, refresh the page to see the changes", ['alert-success', 'alert-dismissible'])
+            },
+            error: function(data) {
+                displayRequestErrors(data)
+            }
+        })
+    }
 
     function extractFromDatabase() {
         let schemas = [];

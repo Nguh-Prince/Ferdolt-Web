@@ -112,7 +112,6 @@ class GroupDatabaseSerializer(serializers.ModelSerializer):
         model = models.GroupDatabase
         fields = ("id", "database_id", "database_name", "database_host", "database_port")
 
-
 class ExtractFromGroupSerializer(serializers.ModelSerializer):
     use_time = serializers.BooleanField(default=True, required=False)
 
@@ -240,3 +239,48 @@ class SynchronizationGroupSerializer(serializers.Serializer):
     def validate_participants(self, data):
         return self.validate_list_of_database_ids(data)
 
+class AddDatabaseToGroupSerializer(serializers.Serializer):
+    database = serializers.IntegerField(required=False, allow_null=True)
+    database_object = DatabaseSerializer(required=False, allow_null=True)
+    can_write = serializers.BooleanField(default=True, required=False)
+    can_read = serializers.BooleanField(default=True, required=False)
+    extraction_frequency = serializers.IntegerField(required=False)
+    synchronization_frequency = serializers.IntegerField(required=False)
+
+    def validate_database_id(self, data):
+        if not data is None:
+            # check if a database exists with that id in the database
+            query = Database.objects.filter(id=data)
+
+            if not query.exists():
+                raise serializers.ValidationError( _("No database exists with id %(id)d" % {'id': data}) )
+
+            return query.first()
+
+    def validate_database_object(self, data):
+        return DatabaseSerializer.create(data)
+
+    def validate(self, attrs):
+        # database_id or database_object must be in the attrs
+        if 'database_id' not in attrs and 'database_object' not in attrs:
+            raise serializers.ValidationError( _("The database_id or the database_object must be set") )
+        
+        if 'database' not in attrs and 'database_object' in attrs:
+            # we do this because we want to use only the 'database' value in the view
+            # and when there is a database_object a new database corresponding to that object is created
+            attrs['database'] = attrs['database_object']
+
+        if 'can_write' not in attrs:
+            attrs['can_write'] = True
+
+        if 'can_read' not in attrs:
+            attrs['can_read'] = True
+
+        if 'extraction_frequency' not in attrs:
+            attrs['extraction_frequency'] = 1
+
+        if 'synchronization_frequency' not in attrs:
+            attrs['synchronization_frequency'] = 2
+
+        return attrs
+    

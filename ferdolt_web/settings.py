@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'users',
     "rest_framework.authtoken",
     'simple_history',
+    'huey.contrib.djhuey',
 ]
 
 ASGI_APPLICATION = 'ferdolt_web.asgi.application'
