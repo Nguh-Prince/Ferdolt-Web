@@ -19,8 +19,8 @@ class DatabaseManagementSystemSerializer(serializers.ModelSerializer):
         model = models.DatabaseManagementSystem
         fields = ("id", "name", )
         extra_kwargs = {
-                "name": {"validators": []}
-            }
+            "name": {"validators": []}
+        }
     
     def validate_name(self, value):
         check_query = self.Meta.model.objects.filter(name=value)
@@ -139,7 +139,7 @@ class DatabaseDetailSerializer(DatabaseSerializer):
             class DatabaseTableColumns(serializers.ModelSerializer):
                 class Meta:
                     model = models.Column
-                    fields = ( "id", "name", )
+                    fields = ( "id", "name", "data_type", "character_maximum_length", "datetime_precision", "numeric_precision")
             
             columns = DatabaseTableColumns(many=True, allow_null=True, required=False, source="column_set")
             class Meta:
@@ -156,12 +156,13 @@ class DatabaseDetailSerializer(DatabaseSerializer):
     password = serializers.CharField(source='get_password')
     port = serializers.CharField(source='get_port')
     host = serializers.CharField(source='get_host')
+    version_object = DatabaseManagementSystemVersionSerializer(source='dbms_version', read_only=True)
     
     class Meta: 
         model = models.Database
         fields = ( "id", "name", "username", 
         "password", 'host', 'port', 'schemas', 
-        'dbms_version', 'instance_name' )
+        'dbms_version', 'instance_name', 'version_object' )
 
 class UpdateDatabaseSerializer(serializers.Serializer):
     username = serializers.CharField(write_only=True)

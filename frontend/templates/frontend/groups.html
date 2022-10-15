@@ -2,6 +2,9 @@
 <li class="breadcrumb-item"><a href="{% url 'frontend:groups' %}">{% trans "Groups" %}</a></li>
 <li class="breadcrumb-item active" aria-current="page">
     {{ group.name }}
+    <span class="mx-2">
+        <i class="small-icon mx-1" data-bs-target="#group-detail-modal" data-bs-toggle="modal" data-feather="edit"></i> <i data-bs-target="#delete-group-confirmation" data-bs-toggle="modal" data-feather="trash" class="small-icon text-danger mx-1"></i>
+    </span>
 </li>
 {% else %}
 <li class="breadcrumb-item active">
@@ -38,8 +41,11 @@
 
 <div class="row py-2" id="groups">
     {% for group in groups %}
-    <div class="card mx-1" style="width: 18rem;" id="group-{{ group.id }}">
+    <div class="card mx-1 w-30" style="width: 18rem;" id="group-{{ group.id }}">
         <div class="card-body">
+            <div class="px-2 py-1" style="position: absolute; top: 0; left: 0;">
+                <input type="checkbox" class="form-check-input select-database" data-group-id="{{ group.id }}">
+            </div>
             <h5 class="card-title">{{ group.name }}</h5>
             <button class="btn btn-primary my-3" data-bs-toggle="modal" data-bs-target="#group-detail-modal" onclick="displayGroup({{ group.id }})">{% trans "Details" %}</button>
 

@@ -1,5 +1,4 @@
 import json
-import re
 import zipfile
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -15,6 +14,7 @@ import pyodbc
 
 from cryptography import fernet
 
+from django.db import transaction
 from django.db.models import Q
 from django.utils.translation import gettext as _
 from django.utils import timezone
@@ -56,7 +56,8 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     serializer_classes = {
         'retrieve': serializers.DatabaseDetailSerializer,
         'refresh': serializers.DatabaseDetailSerializer,
-        'update': serializers.UpdateDatabaseSerializer
+        'update': serializers.UpdateDatabaseSerializer,
+        'list': serializers.DatabaseDetailSerializer
     }
 
     def get_queryset(self):
@@ -121,7 +122,9 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         db: models.Database = self.get_object()
 
         try:
-            tasks.initialize_database(db.id)
+            # tasks.initialize_database(db.id)
+            with transaction.atomic():
+                initialize_database(db)
         except InvalidDatabaseStructure as e:
             logging.error(f"InvalidDatabaseStructure error raised when initializeing {db.__str__()}")
             return Response(data={'message': _("The target database has one or more target tables without primary key fields. Please add them and try again")}, status=status.HTTP_400_BAD_REQUEST)
@@ -545,4 +548,5 @@ class ServerViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return models.Server.objects.all()
+
 

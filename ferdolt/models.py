@@ -1,6 +1,8 @@
+from enum import unique
 import string
 import random
 
+from django.contrib.auth.models import User
 from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext as _
@@ -31,8 +33,9 @@ class Server(models.Model):
     name = models.CharField(max_length=50, unique=True)
     location = models.TextField(null=True, blank=True)
     server_id = models.CharField(max_length=ID_MAX_LENGTH, unique=True, default=generate_server_id)
-    address = models.CharField(max_length=150)
+    address = models.CharField(max_length=150, null=True, blank=True)
     port = models.IntegerField(null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     history = HistoricalRecords()
 
     def save(self, *args, **kwargs):
@@ -40,8 +43,12 @@ class Server(models.Model):
         
         return super().save(*args, **kwargs)
 
+    def __str__(self) -> str:
+        return f"{self.name} on {self.host}:{self.port}"
+
 class DatabaseManagementSystem(models.Model):
     name = models.CharField(max_length=50, unique=True, null=False)
+    codename = models.CharField(max_length=12, unique=True, blank=True, null=True)
 
     class Meta:
         verbose_name = _("Database management system")
@@ -73,6 +80,7 @@ class Database(models.Model):
     history = HistoricalRecords()
     provides_successful_connection = models.BooleanField(default=False)
     is_initialized = models.BooleanField(default=False)
+    server: Server = models.ForeignKey(Server, on_delete=models.CASCADE, null=True)
 
     class Meta:
         unique_together = [
@@ -232,7 +240,10 @@ class ColumnConstraint(models.Model):
     column: Column = models.ForeignKey(Column, on_delete=models.CASCADE)
     is_primary_key: bool = models.BooleanField(default=False)
     is_foreign_key: bool = models.BooleanField(default=False)
-    references: Column = models.ForeignKey(Column, null=True, on_delete=models.SET_NULL, related_name='references', blank=True)
+    references: Column = models.ForeignKey(
+        Column, null=True, on_delete=models.SET_NULL, 
+        related_name='references', blank=True
+    )
     references_tracking_id: Column = models.ForeignKey(
         Column, null=True, on_delete=models.SET_NULL, 
         related_name='references_tracking_id', blank=True 
@@ -256,16 +267,16 @@ class ColumnConstraint(models.Model):
         super().save(*args, **kwargs)
 
 def generate_random_string(length, include_uppercase=True, include_lowercase=False, include_digits=True, include_symbols=False, symbol_set:str=''):
-        if not include_uppercase and not include_lowercase and not include_digits and not include_symbols:
-          raise ValueError("At least one of the following must be true; include_uppercase, include_lowercase, include_digits, include_symbols")
+    if not include_uppercase and not include_lowercase and not include_digits and not include_symbols:
+        raise ValueError("At least one of the following must be true; include_uppercase, include_lowercase, include_digits, include_symbols")
 
-        string_set = ''
-        string_set += string.ascii_uppercase if include_uppercase else ''
-        string_set += string.ascii_lowercase if include_lowercase else ''
-        string_set += string.digits if include_digits else ''
-        
-        if include_symbols:
-            symbol_set = symbol_set if symbol_set else '~`!@#$%^&*()_-=+/?.>,<\|\\]}[{;:\'"'
-            string_set += symbol_set
+    string_set = ''
+    string_set += string.ascii_uppercase if include_uppercase else ''
+    string_set += string.ascii_lowercase if include_lowercase else ''
+    string_set += string.digits if include_digits else ''
+    
+    if include_symbols:
+        symbol_set = symbol_set if symbol_set else '~`!@#$%^&*()_-=+/?.>,<\|\\]}[{;:\'"'
+        string_set += symbol_set
 
-        return  ''.join(random.choices( string_set, k=length ))
+    return  ''.join(random.choices( string_set, k=length ))

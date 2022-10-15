@@ -1,5 +1,6 @@
 import logging
 from sqlite3 import ProgrammingError
+import time
 
 from cryptography.fernet import Fernet
 
@@ -20,7 +21,7 @@ from django.utils.translation import gettext as _
 import datetime as dt
 import json
 
-sql_server_regex = re.compile("sql\s*server", re.I)
+sql_server_regex = re.compile("sqlserver", re.I)
 postgresql_regex = re.compile("postgres", re.I)
 deletion_table_regex = re.compile("_deletion$")
 
@@ -89,9 +90,6 @@ def get_column_dictionary(table: ferdolt_models.Table, column_name: str) -> dict
         return None
 
 def get_database_connection(database: ferdolt_models.Database) -> pyodbc.Cursor:
-    # if not isinstance( database, ferdolt_models.Database ):
-    #     raise ValueError( _("Invalid database passed, expected a %(expected)s object, got a %(gotten)s object instead" % { 'expected': str(ferdolt_models.Database), 'gotten': type(database) }) )
-
     dbms_name = database.dbms_version.dbms.name
 
     if sql_server_regex.search(dbms_name):
@@ -150,6 +148,14 @@ def get_temporary_table_name(database, temporary_table_name: str):
 
     if postgresql_regex.search(dbms_name):
         return f"{temporary_table_name}"
+
+def get_query_placeholder(is_postgres_db, is_sqlserver_db, is_mysql_db):
+    validate_function(is_postgres_db=is_postgres_db, is_mysql_db=is_mysql_db, is_sqlserver_db=is_sqlserver_db)
+    
+    if is_sqlserver_db:
+        return "?"
+    if is_postgres_db:
+        return "%s"
 
 def get_dbms_booleans(database) -> dict:
     dbms_name = database.dbms_version.dbms.name
@@ -685,15 +691,15 @@ def get_create_tracking_id_column_query(table, is_postgres_db=False, is_mysql_db
         return f"""
             IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table.name}' AND TABLE_SCHEMA = '{table.schema.name}' AND COLUMN_NAME = '{column_name}')
             BEGIN
-                ALTER TABLE {table.schema.name}.{table.name} ADD {column_name} VARCHAR({length});
+                ALTER TABLE {table.schema.name}.{table.name} ADD {column_name} VARCHAR({length}) UNIQUE;
             END
         """
     elif is_postgres_db:
         return f"""
-        ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS {column_name} VARCHAR({length})
+        ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS {column_name} VARCHAR({length}) UNIQUE
         """
 
-def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column, sequence_name, server_id, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, column_name='tracking_id', primary_key_column_data_type='int'):
+def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column, sequence_name, server_id, is_postgres_db=False, is_sqlserver_db=False, is_mysql_db=False, column_name='tracking_id', primary_key_column_data_type='int', batch_size=99):
     if is_sqlserver_db:
         return f"""
             IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table_name}' AND TABLE_SCHEMA = '{schema_name}' AND COLUMN_NAME = '{column_name}') 
@@ -725,15 +731,42 @@ def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column
 
     elif is_postgres_db:
         return f"""
-            DO $$ 
+            call set_{schema_name}_{table_name}_tracking_id_where_null({batch_size});
+
+            --DO $$ 
+            --DECLARE table_ids RECORD;
+            --BEGIN
+            --    IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table_name}' AND TABLE_SCHEMA='{schema_name}' AND COLUMN_NAME='{column_name}') THEN 
+            --        BEGIN
+            --            FOR table_ids IN SELECT {primary_key_column} FROM {schema_name}.{table_name} WHERE tracking_id IS NULL LIMIT {batch_size} LOOP 
+            --                UPDATE {schema_name}.{table_name} SET {column_name} = '{server_id}' || to_char( now(), 'yyyyMMddhhmmss' ) 
+            --                || LPAD( CAST( nextval('{sequence_name}') AS VARCHAR ), 2, '0' ) 
+            --                WHERE {primary_key_column} = table_ids.{primary_key_column};
+            --            END LOOP;
+            --        END;
+            --    END IF;
+            --END;
+            --$$
+        """
+
+def get_set_tracking_id_where_null_query(
+    table_name, schema_name, primary_key_columns, 
+    sequence_name, server_id, is_postgres_db=False, is_sqlserver_db=False, 
+    is_mysql_db=False, column_name='tracking_id'
+):
+    procedure_name = f"set_{schema_name}_{table_name}_tracking_id_where_null"
+    if is_postgres_db:
+        return f"""
+            CREATE OR REPLACE PROCEDURE {procedure_name}(batch_size int, datetime_string varchar(8))
+            LANGUAGE plpgsql AS $$ 
             DECLARE table_ids RECORD;
             BEGIN
                 IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table_name}' AND TABLE_SCHEMA='{schema_name}' AND COLUMN_NAME='{column_name}') THEN 
-                    BEGIN
-                        FOR table_ids IN SELECT {primary_key_column} FROM {schema_name}.{table_name} WHERE tracking_id IS NULL LOOP 
-                            UPDATE {schema_name}.{table_name} SET {column_name} = '{server_id}' || to_char( now(), 'yyyyMMddhhmmss' ) 
+                    BEGIN 
+                        FOR table_ids IN SELECT {', '.join( [column.name for column in primary_key_columns] )} FROM {schema_name}.{table_name} WHERE tracking_id IS NULL LIMIT batch_size LOOP 
+                            UPDATE {schema_name}.{table_name} SET {column_name} = '{server_id}' || datetime_string 
                             || LPAD( CAST( nextval('{sequence_name}') AS VARCHAR ), 2, '0' ) 
-                            WHERE {primary_key_column} = table_ids.{primary_key_column};
+                            WHERE { ' AND '.join( [ f"{column.name}=table_ids.{column.name}" for column in primary_key_columns ] ) };
                         END LOOP;
                     END;
                 END IF;
@@ -831,7 +864,7 @@ def create_column_if_not_exists(table, column_name, is_postgres_db=False, is_mys
 
     if is_postgres_db:
         return f"""
-        ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS {column_name}; 
+        ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS {column_name} {data_type}; 
         """
 
     if is_mysql_db:
@@ -930,12 +963,10 @@ def insert_update_delete_trigger_query(
                 RETURNS TRIGGER AS $function$ 
                 DECLARE table_ids RECORD; 
                 BEGIN
-                    IF (TG_OP = 'DELETE') THEN -- 
+                    IF (TG_OP = 'DELETE') THEN 
                         BEGIN
-                            FOR table_ids in SELECT { ', '.join( primary_key_column_names ) if not tracking_id_exists else 'tracking_id' } FROM OLD LOOP 
-                                INSERT INTO {table.schema.name}_{table.name}_deletion (row_tracking_id, deletion_time) 
-                                VALUES ( tables_ids.tracking_id, now() {"AT TIME ZONE 'UTC'" if use_timezone else ''} );
-                            END LOOP;
+                            INSERT INTO {table.schema.name}_{table.name}_deletion (row_tracking_id, deletion_time) 
+                            VALUES ( tables_ids.tracking_id, now() {"AT TIME ZONE 'UTC'" if use_timezone else ''} );
                         END;
                     
                     ELSIF (TG_OP = 'UPDATE') THEN 
@@ -944,12 +975,10 @@ def insert_update_delete_trigger_query(
                             { ' AND '.join([ f"{column}=NEW.{column}" for column in primary_key_column_names]) if not tracking_id_exists else f'{tracking_id_column}=NEW.{tracking_id_column}' };
                         END;
 
-                    ELSIF (TG_OP = 'INSERT') THEN 
-                        FOR table_ids IN SELECT { ', '.join( primary_key_column_names )} FROM NEW WHERE tracking_id IS NULL LOOP 
-                            UPDATE {table.get_queryname()} SET tracking_id = '{SERVER_ID}' || TO_CHAR( now(), 'yyyyMMddhhmmss' ) 
-                            || LPAD( CAST(nextval('{sequence_name}') AS VARCHAR), 2, '0' ) 
-                            WHERE { " AND ".join( [ f"{column}=table_ids.{column}" for column in primary_key_column_names ] ) };
-                        END LOOP;
+                    ELSIF (TG_OP = 'INSERT') THEN                         
+                        UPDATE {table.get_queryname()} SET tracking_id = '{SERVER_ID}' || TO_CHAR( now(), 'yyyyMMddhhmmss' ) 
+                        || LPAD( CAST(nextval('{sequence_name}') AS VARCHAR), 2, '0' ) 
+                        WHERE { " AND ".join( [ f"{column}=NEW.{column}" for column in primary_key_column_names ] ) };
 
                     END IF;
 
@@ -1102,49 +1131,93 @@ def initialize_database( database_record ):
                         
                         query = get_create_tracking_id_column_query(table, **dbms_booleans)
 
-                        breakpoint()
-
                         cursor.execute(query)
 
                         try:
                             logging.info(f"Creating the tracking_id sequence in the {database_record.__str__()} database")
                             print(f"Creating the tracking_id sequence in the {database_record.__str__()} database")
 
+                            sequence_name = f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence"
+
                             # create sequence
-                            sequence_query = create_sequence_query(f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence", **dbms_booleans)
-                            
-                            breakpoint()
+                            sequence_query = create_sequence_query(f"{sequence_name}", **dbms_booleans)
 
                             cursor.execute( sequence_query )
 
                             logging.info(f"Setting the tracking_id where null in the {table.get_queryname()} in the {database_record.__str__()} database")
                             print(f"Setting the tracking_id where null in the {table.get_queryname()} in the {database_record.__str__()} database")
 
-                            query = set_tracking_id_where_null_query(table.name, table.schema.name, primary_key_columns.first().name, server_id=server_id, sequence_name=f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence", **dbms_booleans )
+                            results = cursor.execute(f"SELECT COUNT(*) FROM {table.get_queryname()}").fetchone()
 
-                            breakpoint()
-                            
-                            try:
-                                # set the tracking_id where it is null
-                                cursor.execute( query )
-                                logging.info("tracking_id column populated successfully")
-                                print("tracking_id column populated successfully")
-                            except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
-                                logging.error(f"Error setting tracking_id where null in the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
-                                print(f"Error setting tracking_id where null in the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
-                                logging.error(f"Query to set the tracking_id where null: {sequence_query}")
-                                success_flag = False
-                                connection.rollback()
-                                raise e
+                            number_of_rows = results[0]
+                            batch_size = 99
 
-                            tracking_id_exists = True
+                            number_of_iterations, remainder = divmod(number_of_rows, batch_size)
+
+                            number_of_iterations += 0 if remainder == 0 else 1
+
+                            query = set_tracking_id_where_null_query(
+                                table.name, table.schema.name, 
+                                primary_key_columns.first().name, server_id=server_id, 
+                                sequence_name=f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence", 
+                                **dbms_booleans, batch_size=batch_size 
+                            )
+
+                            if dbms_booleans['is_sqlserver_db']:
+                                number_of_iterations = 1
+
+                            if dbms_booleans['is_postgres_db']:
+                                # create the function to populate the tracking_id
+                                try:
+                                    procedure_name = f"set_{table.schema.name}_{table.name}_tracking_id_where_null"
+                                    procedure_query = get_set_tracking_id_where_null_query(table.name, table.schema.name, primary_key_columns, sequence_name=sequence_name, server_id=SERVER_ID, **dbms_booleans)
+                                    cursor.execute(procedure_query)
+
+                                    for i in range(number_of_iterations):
+                                        try:
+                                            date_time_string = dt.datetime.now().strftime('%Y%m%d%H%M%S')
+                                            call_procedure_query = f"call {procedure_name}({batch_size}, '{date_time_string}')"
+                                            cursor.execute(call_procedure_query)
+                                            time.sleep(2)
+                                        except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
+                                            logging.error(f"Error calling the {procedure_name} procedure")
+                                            logging.error(f"{call_procedure_query}")
+                                            connection.rollback()
+                                            successful_flag = False
+                                            raise e
+                                
+                                except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                                    logging.error(f"Error creating the procedure to populate the tracking_id column")
+                                    logging.error(f"Query to create the procedure: {procedure_query}")
+                                    connection.rollback()
+                                    successful_flag = False
+                                    raise e
+
+                            else:
+                                # setting the tracking_id where null in batches to avoid integrity errors due to duplicate tracking_ids
+                                try:
+                                    # set the tracking_id where it is null
+                                    cursor.execute( query )
+                                    logging.info("tracking_id column populated successfully")
+                                except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
+                                    logging.error(f"Error setting tracking_id where null in the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
+                                    logging.error(f"Query to set the tracking_id where null: {sequence_query}")
+                                    success_flag = False
+                                    connection.rollback()
+                                    raise e
 
                         except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
                             logging.error(f"Error creating tracking_id_sequence. Error: {e}")
                             logging.error(f"Query to create the sequence: {sequence_query}")
                             connection.rollback()
                             success_flag = False
-                            raise e                        
+                            raise e
+                        except ( psycopg.errors.UniqueViolation ) as e:
+                            logging.error(f"Error setting the tracking_id. Error: {str(e)}")
+                            connection.rollback()
+                            success_flag = False
+                            breakpoint()
+                            raise e
 
                     except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
                         logging.error(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
@@ -1168,10 +1241,12 @@ def initialize_database( database_record ):
                             create_sequence_query_string = create_sequence_query(f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence", **dbms_booleans)
 
                             cursor.execute( create_sequence_query_string )
+                            
+                            sequence_name = f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence"
 
                             set_tracking_id_where_null_query_string = set_tracking_id_where_null_query_multiple_primary_keys(
                                 table, primary_key_columns, server_id, 
-                                sequence_name=f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence", **dbms_booleans
+                                sequence_name=sequence_name, **dbms_booleans
                             )
 
                             try:
@@ -1180,8 +1255,43 @@ def initialize_database( database_record ):
 
                                 logging.info(f"Query to set the tracking_id where null: {set_tracking_id_where_null_query_string}")
 
-                                cursor.execute( set_tracking_id_where_null_query_string )
-                        
+                                if not dbms_booleans['is_postgres_db']:
+                                    cursor.execute( set_tracking_id_where_null_query_string )
+                                else:
+                                    procedure_query = get_set_tracking_id_where_null_query(table.name, table.schema.name, primary_key_columns, sequence_name, SERVER_ID, **dbms_booleans)
+
+                                    try:
+                                        cursor.execute(procedure_query)
+                                        
+                                        # get the number of rows in the table
+                                        query = f"SELECT COUNT(*) FROM {table.get_queryname()}"
+                                        number_of_rows = cursor.execute(query).fetchone()[0]
+                                        batch_size = 99
+
+                                        number_of_iterations, remainder = divmod(number_of_rows, batch_size)
+
+                                        number_of_iterations += 0 if remainder == 0 else 1
+
+                                        for i in range( number_of_iterations ):
+                                            try:
+                                                date_time_string = dt.datetime.now().strftime('%Y%m%d%H%M%S')
+                                                call_procedure_query = f"call {procedure_name}({batch_size}, '{date_time_string}')"
+                                                cursor.execute(call_procedure_query)
+                                                time.sleep(2)
+                                            except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
+                                                logging.error(f"Error calling the {procedure_name} procedure")
+                                                logging.error(f"{call_procedure_query}")
+                                                connection.rollback()
+                                                successful_flag = False
+                                                raise e
+
+                                    except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                                        logging.error(f"Error creating the procedure to set the tracking_id where null")
+                                        logging.error(f"Query to create the procedure: {procedure_query}")
+                                        success_flag = False
+                                        connection.rollback()
+                                        raise e
+
                             except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                 logging.error(f"Error setting the values of the tracking_id column in the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
                                 logging.error(f"Query to set the values of the tracking_id column: {set_tracking_id_where_null_query_string}")
@@ -1202,6 +1312,7 @@ def initialize_database( database_record ):
                         success_flag = False
                         connection.rollback()
                         raise e
+                
                 else:
                     raise InvalidDatabaseStructure(f"The {table.__str__()} table in the {database_record.__str__()} does not have a primary key column")
 
@@ -1227,7 +1338,7 @@ def initialize_database( database_record ):
                     success_flag = False
                     raise e
 
-            for constraint in ferdolt_models.ColumnConstraint.objects.filter(is_foreign_key=True, references__isnull=False, column__table=table):
+            for constraint in ferdolt_models.ColumnConstraint.objects.filter(is_foreign_key=True, references__isnull=False, column__table=table).distinct():
                 # add a new column to the table for the tracking id of the table this foreign key is referencing
                 column_name = f"{constraint.column.name}_tracking_id"
 
@@ -1237,9 +1348,9 @@ def initialize_database( database_record ):
                 try:
                     cursor.execute(query)
 
-                    column = ferdolt_models.Column.objects.create(name=column_name, table=table, data_type="varchar")
+                    column = ferdolt_models.Column.objects.get_or_create(name=column_name, table=table, data_type="varchar")
                    
-                    constraint.references_tracking_id = column
+                    constraint.references_tracking_id = column[0]
                     constraint.save()
 
                 except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:

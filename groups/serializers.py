@@ -5,7 +5,7 @@ from django.utils.translation import gettext as _
 from rest_framework import serializers
 from core.functions import decrypt
 
-from ferdolt.models import Column, Database
+from ferdolt.models import Column, Database, generate_random_string
 from ferdolt.serializers import ColumnSerializer, DatabaseSerializer
 from . import models
 
@@ -213,7 +213,8 @@ class SynchronizationGroupSerializer(serializers.Serializer):
         # ("partial", _("Partial synchronization"))
     )
     type = serializers.ChoiceField(choices=synchronization_type_choices)
-    
+    group_name = serializers.CharField(required=False, allow_null=True)
+
     # if this is not provided then all the databases can receive and provide data
     sources = serializers.ListField(child=serializers.IntegerField(), required=False)
     participants = serializers.ListField(child=serializers.IntegerField())
@@ -232,6 +233,12 @@ class SynchronizationGroupSerializer(serializers.Serializer):
                     )
                 )
         return temporary_list
+
+    def validate(self, attrs):
+        if 'group_name' not in attrs or not attrs['group_name']:
+            attrs['group_name'] = generate_random_string(6)
+
+        return super().validate(attrs)
 
     def validate_sources(self, data):
         return self.validate_list_of_database_ids(data)

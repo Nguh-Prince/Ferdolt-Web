@@ -42,6 +42,7 @@ def generate_fernet_key():
     return encrypt( fernet.Fernet.generate_key() )[1]
 
 def generate_unique_group_name(length=15):
+    print("Calling generate_unique_group_name function")
     while True:
         name = choices( string.ascii_lowercase + string.digits, k=length )
 

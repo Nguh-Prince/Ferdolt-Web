@@ -24,6 +24,7 @@
         background-color: rgba(0, 0, 0, 0.05);
     }
 </style>
+
 {% endblock %} {% block message_active %}active{% endblock %} {% block messages %} {% if database and not connection %}
 <div class="toast" role="alert" aria-live="assertive" aria-atomic="true">
     <div class="toast-header">
@@ -58,7 +59,7 @@
             <div class="page-title-box row">
                 <div class="row col-md-6 justify-content-start">
                     <div class="col-auto align-self-center d-none" id="delete-databases-button">
-                        <button class="btn btn-outline-danger btn-sm add-file">
+                        <button class="btn btn-outline-danger btn-sm add-file" data-bs-toggle="modal" data-bs-target="#delete-database-confirmation">
                             </i>{% trans "Delete database" %}
                         </button>
                     </div>
@@ -288,7 +289,7 @@
 
             <div class="modal-footer">
                 <button data-bs-dismiss="modal" class="btn btn-primary">{% trans "No" %}</button>
-                <a href="{% url 'frontend:delete-database' database.id %}" class="btn btn-danger">{% trans "Yes" %}</a>
+                <a id="confirm-deletion" href="{% url 'frontend:delete-database' database.id %}" class="btn btn-danger">{% trans "Yes" %}</a>
             </div>
         </div>
     </div>
@@ -358,6 +359,23 @@
     </div>
 </div>
 {% else %}
+<div class="modal" id="delete-database-confirmation">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">
+                    
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button data-bs-dismiss="modal" class="btn btn-blue">{% trans "No" %}</button>
+                <button id="confirm-deletion" class="btn btn-danger">{% trans "Yes" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal" id="new-database-modal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -367,49 +385,51 @@
             </div>
 
             <div class="modal-body">
-                <div class="mb-3">
-                    <label for="new-database-name">{% trans "Database name" %}</label>
-                    <input type="text" name="new-database-name" id="new-database-name" required class="form-control" value="BikeStores">
-                </div>
-
-                <div class="mb-3">
-                    <label for="new-database-dbms-version">{% trans "DBMS version" %}</label>
-                    <select id="new-database-dbms-version" class="form-select">
-                        {% for version in dbms_versions %}
-                        <option value="{{ version.id }}" 
-                            data-version-number="{{version.version_number}}"
-                            data-dbms-name="{{version.}}"
-                        >{{ version }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="mb-3">
-                    <label for="new-database-instance-name">{% trans "Instance name" %}</label>
-                    <input id="new-database-instance-name" value="SQLEXPRESS" class="form-control" />
-                </div>
-
-                <div class="row mb-3">
-                    <div class="col-md-8">
-                        <label for="new-database-host">{% trans "Host" %}</label>
-                        <input type="text" class="form-control" id="new-database-host" value="localhost">
+                <form id="new-database-modal-form">
+                    <div class="mb-3">
+                        <label for="new-database-name">{% trans "Database name" %}</label>
+                        <input type="text" name="new-database-name" id="new-database-name" required class="form-control" value="BikeStores">
                     </div>
-                    <div class="col-md-4">
-                        <label for="new-database-port">{% trans "Port" %}</label>
-                        <input type="number" id="new-database-port" class="form-control" value="1433">
+    
+                    <div class="mb-3">
+                        <label for="new-database-dbms-version">{% trans "DBMS version" %}</label>
+                        <select id="new-database-dbms-version" class="form-select">
+                            {% for version in dbms_versions %}
+                            <option value="{{ version.id }}" 
+                                data-version-number="{{version.version_number}}"
+                                data-dbms-name="{{version.}}"
+                            >{{ version }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
-                </div>
-
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <label for="new-database-username">{% trans "Username" %}</label>
-                        <input type="text" class="form-control" id="new-database-username" value="sa">
+    
+                    <div class="mb-3">
+                        <label for="new-database-instance-name">{% trans "Instance name" %}</label>
+                        <input id="new-database-instance-name" value="SQLEXPRESS" class="form-control" />
                     </div>
-                    <div class="col-md-6">
-                        <label for="new-database-password">{% trans "Password" %}</label>
-                        <input type="password" id="new-database-password" class="form-control" value="groupesia@2022">
+    
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <label for="new-database-host">{% trans "Host" %}</label>
+                            <input type="text" class="form-control" id="new-database-host" value="localhost">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="new-database-port">{% trans "Port" %}</label>
+                            <input type="number" id="new-database-port" class="form-control" value="1433">
+                        </div>
                     </div>
-                </div>
+    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="new-database-username">{% trans "Username" %}</label>
+                            <input type="text" class="form-control" id="new-database-username" value="sa">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="new-database-password">{% trans "Password" %}</label>
+                            <input type="password" id="new-database-password" class="form-control" value="groupesia@2022">
+                        </div>
+                    </div>
+                </form>
             </div>
 
             <div class="modal-footer">
@@ -420,7 +440,7 @@
 </div>
 
 <div class="modal" id="synchronize-databases-modal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-fullscreen">
         <div class="modal-content">
             <div class="modal-header">
                 <div class="modal-title">{% trans "Synchronize databases" %}</div>
@@ -428,6 +448,10 @@
             </div>
 
             <div class="modal-body">
+                <div class="mb-3">
+                    <label for="group-name">{% trans "Group name" %}</label>
+                    <input type="text" class="form-control" id="group-name">
+                </div>
                 <div class="mb-3">
                     <label for="synchronization-type">{% trans "Synchronization type" %}</label>
                     <select id="synchronization-type" class="form-select">
@@ -441,7 +465,7 @@
                     </select>
                 </div>
                 <div class="mb-3">
-                    <table class="table table-striped">
+                    <table class="table table-striped" id="synchronize-databases-modal-databases-table">
                         <thead>
                             <th></th>
                             <th>{% trans "DBMS version" %}</th>
@@ -454,6 +478,10 @@
 
                         </tbody>
                     </table>
+                </div>
+
+                <div id="group-tables-list" class="mb-3">
+
                 </div>
             </div>
 
@@ -481,7 +509,13 @@
             $("#synchronize-databases-button").removeClass('d-none')
         }
 
+        let selectedDatabasesNames = SELECTED_DATABASES.map( (item) => {return item.name} ).join(', ')
+
         if (SELECTED_DATABASES.length >= 1) {
+            $("#delete-database-confirmation .modal-title").text(
+                `Are you sure you want to delete the ${selectedDatabasesNames} ${ SELECTED_DATABASES.length > 1 ? "databases" : "database" }`
+            )
+
             $("#delete-databases-button").removeClass('d-none')
             let text = SELECTED_DATABASES.length > 1 ? "Delete databases" : "Delete database"
 
@@ -493,7 +527,7 @@
         populateSynchronizeDatabaseseModalTable()
     }
 
-    $("#delete-databases-button").click(() => {
+    $("#confirm-deletion").click(() => {
         deleteSelectedDatabases()
     })
 
@@ -520,8 +554,170 @@
                     }
                 }
 
-                $("#synchronize-databases-modal tbody").append(row)
+                $("#synchronize-databases-modal-databases-table tbody").append(row)
             })
+
+            let tablesInCommon = getTablesInCommon(SELECTED_DATABASES)
+            console.log("Tables in common gotten from the selected databases")
+            console.log(tablesInCommon)
+
+            // create the accordion for the tables
+            let tablesAccordion = createElement('ul', 'cd-accordion cd-accordion--animated margin-top-lg margin-bottom-lg'.split(' '))
+            $("#group-tables-list").html('')
+            $("#group-tables-list").append(tablesAccordion)
+                
+            let tablesAccordionItem = createElement('li', 'cd-accordion__item cd-accordion__item--has-children schema'.split(' '))
+            $(tablesAccordion).append(tablesAccordionItem)
+
+            let tablesAccordionItemInput = createElement('input', 'cd-accordion__input'.split(' '), {checked: true, id: 'new-group-tables', type: 'checkbox'})
+            $(tablesAccordionItem).append(tablesAccordionItemInput)
+
+            let tablesAccordionItemLabel = createElementsRecursively({
+                tag: "label",
+                classes: 'cd-accordion__label cd-accordion__label--icon-folder'.split(' '),
+                attributes: {
+                    for: `new-group-tables`
+                },
+                elements: [
+                    {
+                        tag: "span",
+                        classes: [],
+                        attributes: {
+                            textContent: "Tables"
+                        }
+                    }
+                ]
+            })      
+            $(tablesAccordionItem).append(tablesAccordionItemLabel)
+
+            let subAccordion = createElementFromObject({
+                tag: "ul",
+                classes: 'cd-accordion__sub cd-accordion__sub-11'.split(' '),
+                attributes: null
+            })
+            $(tablesAccordionItem).append(subAccordion)
+
+            for (let table of Object.keys(tablesInCommon)) {
+                let tableObject = tablesInCommon[table];
+
+                let tableAccordionItem = createElementsRecursively({
+                    tag: "li",
+                    classes: 'cd-accordion__item cd-accordion__item--has-children'.split(' '),
+                    attributes: null,
+                    elements: [
+                        {
+                            tag: "input",
+                            classes: 'cd-accordion__input'.split(' '),
+                            attributes: {id: `${table}`, type: 'checkbox'}
+                        },
+                        {
+                            tag: "label",
+                            classes: 'cd-accordion__label cd-accordion__label--icon-folder'.split(' '),
+                            attributes: { for: `${table}` },
+                            elements: [
+                                {
+                                    tag: "input",
+                                    classes: 'mx-2 select-table'.split(' '),
+                                    attributes: {'data-group-table': table, type: 'checkbox'}
+                                },
+                                {
+                                    tag: "span",
+                                    classes: [],
+                                    attributes: {textContent: `${table}`}
+                                }
+                            ]
+                        }
+                    ]
+                })
+                $(subAccordion).append(tableAccordionItem)
+
+                let tableAccordionSubItem = createElementsRecursively({
+                    tag: "ul",
+                    classes: 'cd-accordion__sub cd-accordion__sub--l2'.split(' '),
+                    attributes: null
+                })
+                $(tableAccordionItem).append(tableAccordionSubItem)
+
+                let tableAccordionSubItemItem = createElementFromObject({
+                    tag: "li",
+                    classes: 'cd-accordion__item'.split(' '),
+                    attributes: []
+                })
+                $(tableAccordionSubItem).append(tableAccordionSubItemItem)
+
+                let tableAccordionSubItemItemColumnsTable = createElementsRecursively({
+                    tag: 'table',
+                    classes: 'table table-striped'.split(' '),
+                    attributes: null,
+                    elements: [
+                        {
+                            tag: 'thead',
+                            classes: [],
+                            attributes: null,
+                            elements: [
+                                {
+                                    tag: "tr",
+                                    classes: [],
+                                    attributes: null,
+                                    elements: [
+                                        {
+                                            tag: "th",
+                                            attributes: {textContent: "Column name"},
+                                            classes: []
+                                        },
+                                        {
+                                            tag: "th",
+                                            attributes: {textContent: "Data type"},
+                                            classes: []
+                                        },
+                                        {
+                                            tag: "th",
+                                            attributes: {textContent: "Character max."},
+                                            classes: []
+                                        },
+                                        {
+                                            tag: "th",
+                                            attributes: {textContent: "Datetime precision"},
+                                            classes: []
+                                        },
+                                        {
+                                            tag: "th",
+                                            attributes: {textContent: "Numeric precision"},
+                                            classes: []
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                })
+                $(tableAccordionSubItemItem).append(tableAccordionSubItemItemColumnsTable)
+                
+                let tableAccordionSubItemItemColumnsTableBody = createElementFromObject({
+                    tag: 'tbody', attributes: null, classes: []
+                })
+                $(tableAccordionSubItemItemColumnsTable).append(tableAccordionSubItemItemColumnsTableBody)
+
+                for (let column of tableObject.columns) {
+                    let row = createElementsRecursively({
+                        tag: "tr",
+                        attributes: [],
+                        classes: [],
+                        elements: []
+                    })
+                    $(tableAccordionSubItemItemColumnsTableBody).append(row)
+
+                    let keys = ["name", "data_type", 'character_maximum_length', 'datetime_precision', 'numeric_precision']
+
+                    for (let key of keys) {
+                        let cell = createElementFromObject({
+                            tag: "td", attributes: { textContent: column[key] }, classes: []
+                        })
+
+                        $(row).append(cell)
+                    }
+                }
+            }
         }
     }
 
@@ -628,7 +824,7 @@
         $('.card')
 
         $(card).find('.database-host').text(`Host: ${databaseObject['clear_host']}`)
-        $(card).find('.database-port').text(`Port: ${databaseObject['clear_port']}`)
+        $(card).find('.database-port').text(`Port: ${databaseObject['port']}`)
 
         $(card).find('.database-detail-link').text("Details")
         $(containerSelector).append(card)
@@ -811,6 +1007,7 @@
         let participants = []
 
         let synchronizationType = $('#synchronization-type').val()
+        let groupName = $("#group-name").val()
 
         for (let database of SELECTED_DATABASES) {
             sources.push(database.id)
@@ -821,7 +1018,8 @@
             let formData = {
                 type: synchronizationType,
                 sources: sources,
-                participants: participants
+                participants: participants,
+                group_name: groupName
             }
 
             // submit the new group 
@@ -844,6 +1042,39 @@
                 }
             })
         }
+    }
+
+    function getTablesInCommon(databaseObjectsList) {
+        let tables = {}
+
+        for (let database of databaseObjectsList) {
+            console.log(`Getting the stuff of the database: ${database.name}`)
+            for ( let schema of database['schemas'] ) {
+                console.log("The schema in the selected database is ")
+                console.log(schema)
+
+                let schemaObject = schema
+
+                let schemaName = schemaObject['name'] 
+
+                for (let table of schemaObject['tables'] ) {
+                    let tableObject = table
+
+                    let tableName = tableObject['name']
+                    let groupTableName = `${schemaName}__${tableName}`
+
+                    if ( !(groupTableName in tables) && !/_deletion/.test(groupTableName) ) {
+                        // add the table to the object
+                        tables[groupTableName] = {
+                            'name': tableName,
+                            'columns': table['columns']
+                        }
+                    }
+                }
+            }
+        }
+
+        return tables;
     }
 </script>
 {% endif %} {% if database %}

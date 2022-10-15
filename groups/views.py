@@ -217,6 +217,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
             return Response( data=serializer.data, status=status.HTTP_201_CREATED )
 
         use_time = not ( 'use_time' in validated_data and not validated_data['use_time'] )
+    
     @action(
         methods=['GET'],
         detail=True
@@ -493,7 +494,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
         validated_data = serializer.validated_data
 
-        group = models.Group.objects.create()
+        group = models.Group.objects.create(name=validated_data['group_name'])
         logging.info("Created the group successfully. Adding tables to the group now")
 
         group_databases = []
