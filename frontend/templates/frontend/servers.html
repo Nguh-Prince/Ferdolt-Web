@@ -39,7 +39,7 @@
 
         <div class="row py-2" id="servers">
             {% for server in servers %}
-            <div class="card mx-1" style="width: 18rem;" id="server-{{ server.id }}">
+            <!-- <div class="card mx-1" style="width: 18rem;" id="server-{{ server.id }}">
                 <div class="card-body">
                     <h5 class="card-title">{{ server.name }}</h5>
                     <h6 class="card-subtitle">
@@ -49,7 +49,7 @@
                         Location: {{ server.location }}
                     </p>
                 </div>
-            </div>
+            </div> -->
             {% endfor %}
         </div>
         {% else %}
@@ -101,10 +101,84 @@
         </div>
     </div>
 </div>
+
+<div class="modal" id="server-detail-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="server-detail-name-input" class="form-label">
+                        {% trans "Server name" %}
+                    </label>
+                    <input type="text" class="form-control" id="server-detail-name-input" value="Local">
+                </div>
+
+                <div class="mb-3 row">
+                    <div class="col-md-8">
+                        <label for="server-detail-address-input" class="form-label">{% trans "Hostname" %}</label>
+                        <input type="text" class="form-control" id="server-detail-address-input"
+                            placeholder="{% trans 'e.g. 192.168.100.25 or www.somesite.com' %}" value="localhost">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="server-detail-port-input" class="form-label">{% trans "Port" %}</label>
+                        <input id="server-detail-port-input" type="number" class="form-control"
+                            placeholder="{% trans 'e.g. 8000' %}" value="8000">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="server-detail-location-input" class="form-label">{% trans "Location" %}</label>
+                    <textarea id="server-detail-location-input" rows="3" class="form-control">Yaounde, Cameroon</textarea>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submit-update-database-form">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+    var SELECTED_SERVERS = []
+
+    $(document).ready(function() {
+        getServersList()
+    })
+
+    $("#submit-update-database-form").click( function() {
+        let serverId = $(this).attr('data-server-id') 
+
+        if (serverId) {
+            SELECTED_SERVERS.map( (server) => {
+                if (server.id == serverId) {
+                    let formData = {
+                        address: $("#server-detail-address-input").val(),
+                        name: $("#server-detail-name-input").val(),
+                        port: $("#server-detail-port-input").val(),
+                        location: $("#server-detail-location-input").val()
+                    }
+                    console.log("Updating the server with the form")
+                    console.log(formData)
+
+                    updateServer(serverId, formData, `Successfully modified the server with id: ${server.server_id}`)
+                }
+            } )
+        }
+    } )
+
+    function setSelectedServers(selectedServers) {
+        SELECTED_SERVERS = selectedServers
+    }
+
     function submitNewServer() {
         formData = {
             name: $("#server-name-input").val(),
@@ -116,10 +190,15 @@
         $.ajax({
             type: 'POST',
             url: `http://${location.host}/${API_BASE_URL}ferdolt/servers/`,
+            headers: {
+                "X-CSRFTOKEN": getCsrfTokenCookie()
+            },
             data: formData,
             // contentType: 'application/json',
             success: function (data) {
                 console.log("Gotten the servers from the API")
+                displayMessage("Server added successfully.", ["alert", "alert-dismissible"])
+
                 state.servers.push(data)
                 displayServer(data)
             },
@@ -191,6 +270,184 @@
             $(parentContainerSelector).append( card )
         }
 
+    }
+
+    function displayServer(serverObject, containerSelector="#servers") {
+        let id = generateRandomId();
+
+        let serverCard = createElementsRecursively({
+            tag: "div", 
+            classes: "card mx-1 col selectable".split(' '),
+            attributes: {id: `${id}`},
+            elements: [
+                {
+                    tag: "div",
+                    classes: "card-body".split(' '),
+                    attributes: null,
+                    elements: [
+                        {
+                            tag: "h5",
+                            classes: "card-title".split(' '),
+                            attributes: { textContent: serverObject.name }
+                        },
+                        {
+                            tag: "h5",
+                            classes: "card-subtitle".split(' '),
+                            attributes: { textContent: `Server ID: ${serverObject.server_id}` }
+                        },
+                        {
+                            tag: "p",
+                            classes: "card-text".split(' '),
+                            attributes: { textContent: `Location: ${serverObject.location}` }
+                        },
+                        {
+                            tag: "button",
+                            classes: "btn btn-primary modify-server".split(' '),
+                            attributes: { id: `server-${id}-details`, "data-bs-toggle": "modal", "data-bs-target": "#server-detail-modal", textContent: "Modify" }
+                        }
+                    ]
+                },
+                {
+                    tag: "div",
+                    classes: "position-absolute mx-2 my-2".split(' '),
+                    attributes: {style: "top: 0; left: 0"},
+                    elements: [
+                        {
+                            tag: "input",
+                            classes: "form-check-input rounded-circle select-card".split(' '),
+                            attributes: {type: "checkbox"}
+                        }
+                    ]
+                }
+            ]
+        })
+
+        $(serverCard).click( function() {
+            let selectCardInput = $(this).find('input.select-card').first()
+            let checked = selectCardInput.prop('checked')
+
+            selectCardInput.prop( !checked )
+            selectCardInput.prop('checked', !checked)
+
+            if (!checked) {
+                let currentlySelectedServers = SELECTED_SERVERS
+
+                currentlySelectedServers.push(serverObject)
+                setSelectedServers(currentlySelectedServers)
+            } else {
+                setSelectedServers( SELECTED_SERVERS.filter( (item) => {
+                    return item !== serverObject
+                } ) )
+            }
+        } )
+        
+        $(serverCard).find('.modify-server').click( function() {
+            displayServerDetail(0, null, serverObject)
+            console.log("Clicked the modify button of the server card")
+        } )
+
+        $(containerSelector).append(serverCard)
+    }
+
+    function displayServers(serverObjectsArray, containerSelector="#servers") {
+        $(containerSelector).html('')
+
+        for (let serverObject of serverObjectsArray) {
+            displayServer(serverObject, containerSelector)
+        }
+    }
+
+    function displayServerDetail(serverId=0, indexInServersList = null, serverObject=null) {
+        let server = null
+
+        if (serverObject) {
+            server = serverObject
+            console.log("In the displayServerDetail function, a server object was passed to this function")
+        }
+        else if (indexInServersList === null) {
+            console.log("In the displayServerDetail function, an index wasn't passed to this function")
+
+            state.servers.map( (_server) => {
+                if ( _server.id === serverId ) {
+                    server = _server
+                }
+            } )
+        } else {
+            console.log("In the displayServerDetail function, an index was passed")
+            try {
+                server = state.server[indexInServersList]
+            } catch (error) {
+                console.error(error)
+            }
+        }
+
+        console.log("In the displayServerDetail function. The server gotten is")
+        console.log(server)
+
+        if (server) {
+            $("#server-detail-modal .modal-title").text(`Server ${server.server_id} on ${server.address}:${server.port}`)
+            $("#server-detail-name-input").val(server.name)
+            $("#server-detail-address-input").val(server.address)
+            $("#server-detail-port-input").val(server.port)
+
+            $("#submit-update-database-form").attr('data-server-id', server.id)
+        }
+    }
+
+    function getServersList() {
+        $.ajax({
+            type: 'GET',
+            url: `http://${location.host}/${API_BASE_URL}ferdolt/servers/`,
+            headers: {
+                "X-CSRFTOKEN": getCsrfTokenCookie()
+            },
+            success: function (data) {
+                console.log("Gotten the servers from the API")
+
+                state.servers = data
+
+                displayServers(state.servers)
+            },
+            error: function (data) {
+                console.log(formData)
+                console.log(data.responseJSON)
+                displayRequestErrors(data)
+            }
+        })
+    }
+
+    function updateServer(serverId, formData, successMessage='') {
+        $.ajax({
+            type: "PUT",
+            url: `http://${location.host}/${API_BASE_URL}ferdolt/servers/${serverId}/`,
+            headers: {
+                "X-CSRFTOKEN": getCsrfTokenCookie()
+            },
+            data: JSON.stringify(formData),
+            contentType: "application/json",
+            success: function(data) {
+                if (!successMessage) {
+                    successMessage = `The ${formData.name} server was modified successfully`
+                } 
+
+                displayMessage(successMessage, ["alert", "alert-dismissible"])
+
+                let currentStateServers = state.servers
+                
+                currentStateServers.map( (server, index) => {
+                    if (server.id === data.id) {
+                        state.servers[index] = data
+
+                        displayServers(state.servers)
+                    }
+                } )
+            }, 
+            error: function(data) {
+                console.log("Error updating server. Error")
+                console.log(data.responseJSON)
+                displayRequestErrors(data)
+            }
+        })
     }
 </script>
 {% endblock %}

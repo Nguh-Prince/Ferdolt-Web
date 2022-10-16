@@ -24,6 +24,7 @@ from core.functions import (
 from ferdolt import models as ferdolt_models
 from ferdolt_web import settings
 from flux.models import File
+from flux import models as flux_models
 from groups import serializers
 
 from . import models
@@ -52,7 +53,7 @@ def extract_from_groupdatabase(
     results = {}
 
     if not target_databases:
-        target_databases = group.groupdatabase_set.filter(can_read=True)
+        target_databases = group.groupdatabase_set.filter(Q(can_read=True) & ~Q(id=group_database.id))
 
     group_dictionary = results.setdefault( group.slug, {} )
 
@@ -70,7 +71,6 @@ def extract_from_groupdatabase(
                     id__in=table.grouptabletable_set.values("table__id"), 
                     schema__database=group_database.database 
                 )
-                
                 table_dictionary = {}
                 for item in actual_database_tables:
                     table_results = []
@@ -136,54 +136,62 @@ def extract_from_groupdatabase(
 
                 if table_dictionary.keys():
                     group_dictionary.setdefault( table.name.lower(), table_dictionary )
+
+            if results.keys():
+                base_file_name = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, 
+                "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}")
+
+                file_name = base_file_name + ".json"
+                zip_file_name = base_file_name + ".zip"
+
+                group_extraction = None
+
+                with open(file_name, "a+") as file:
+                    # creating the json file
+                    json_string = json.dumps( results, default=custom_converter )
+                    token = f.encrypt( bytes( json_string, "utf-8" ) )
+
+                    file.write( token.decode('utf-8') )
+
+                with zipfile.ZipFile(zip_file_name, mode='a') as archive:
+                    # zipping the json file
+                    archive.write(file_name, os.path.basename(file_name))
                     
-                    base_file_name = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, 
-                    "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}")
+                with open( zip_file_name, "rb" ) as __:
+                    file = File.objects.create( 
+                        file=DjangoFile( __, name=os.path.basename(file_name) ), 
+                        size=os.path.getsize(file_name), is_deleted=False, 
+                        hash=sha256( token ).hexdigest() 
+                    )
 
-                    file_name = base_file_name + ".json"
-                    zip_file_name = base_file_name + ".zip"
+                    extraction = models.Extraction.objects.create(
+                        file=file, 
+                        start_time=start_time, 
+                        time_made=time_made
+                    )
 
-                    group_extraction = None
+                    group_extraction = models.GroupExtraction.objects.create(
+                        group=group, 
+                        extraction=extraction, 
+                        source_database=group_database
+                    )
 
-                    with open(file_name, "a+") as file:
-                        # creating the json file
-                        json_string = json.dumps( results, default=custom_converter )
-                        token = f.encrypt( bytes( json_string, "utf-8" ) )
+                    extraction_source_database = flux_models.ExtractionSourceDatabase.objects.create(
+                        extraction=extraction, database=group_database.database
+                    )
 
-                        file.write( token.decode('utf-8') )
+                    for database in target_databases:
+                        connection = get_database_connection(database.database)
 
-                    with zipfile.ZipFile(zip_file_name, mode='a') as archive:
-                        # zipping the json file
-                        archive.write(file_name, os.path.basename(file_name))
-                        
-                    with open( zip_file_name, "rb" ) as __:
-                        file = File.objects.create( 
-                            file=DjangoFile( __, name=os.path.basename(file_name) ), 
-                            size=os.path.getsize(file_name), is_deleted=False, 
-                            hash=sha256( token ).hexdigest() 
+                        # if connection:
+                        models.GroupDatabaseSynchronization.objects.create(extraction=group_extraction, 
+                            group_database=database, is_applied=False
+                        )
+                        flux_models.ExtractionTargetDatabase.objects.create(
+                            extraction=extraction, database=database.databse, is_applied=False
                         )
 
-                        extraction = models.Extraction.objects.create(
-                            file=file, 
-                            start_time=start_time, 
-                            time_made=time_made
-                        )
-
-                        group_extraction = models.GroupExtraction.objects.create(
-                            group=group, 
-                            extraction=extraction, 
-                            source_database=group_database
-                        )
-
-                        for database in target_databases:
-                            connection = get_database_connection(database.database)
-
-                            if connection:
-                                models.GroupDatabaseSynchronization.objects.create(extraction=group_extraction, 
-                                    group_database=database, is_applied=False
-                                )
-
-                    os.unlink( file_name )
+                os.unlink( file_name )
             
             connection.close()
 
@@ -213,6 +221,7 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
             for group_database_synchronization in pending_synchronizations.filter(database=database['database']):
                 # apply the synchronization for this database
                 file_path = group_database_synchronization.extraction.extraction.file.file.path
+                successful_flag = True
 
                 try:
                     zip_file = zipfile.ZipFile(file_path)
@@ -230,13 +239,13 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
                             # the keys of this dictionary are the group's tables
                             dictionary: dict = json.loads(content)
                             dictionary = dictionary[group.slug]
-
+                            
                             group_table_tables = ( models.GroupTableTable.objects
-                                                    .filter(group_table__name__in=dictionary.keys(), 
-                                                        table__schema__database=database_record
-                                                    ) 
-                                                    .order_by('table__level')
-                                                )
+                                .filter(group_table__name__in=dictionary.keys(), 
+                                    table__schema__database=database_record
+                                ) 
+                                .order_by('table__level')
+                            )
 
                             for group_table_table in group_table_tables:
                                 table = group_table_table.table
@@ -284,6 +293,7 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
                                             logging.error(f"Error deleting from the temporary_table {temporary_table_actual_name}. Error: {str(e)}")
                                             logging.error(f"The temporary tables that have already been created are: ")
                                             logging.error(temporary_tables_created)
+                                            successful_flag = False
 
                                             connection.rollback()
                                         
@@ -381,11 +391,13 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
                                             logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
                                             logging.error(f"The temporary tables that have been created are: {temporary_tables_created}")
                                             flag = False
+                                            successful_flag = False
                                         except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
                                             logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
                                             logging.error(f"The temporary tables that have been created are: {temporary_tables_created}")
                                             cursor.connection.rollback()
                                             flag = False
+                                            successful_flag = False
                                         
                                         if dbms_booleans['is_sqlserver_db']:
                                             # set identity_insert on to be able to explicitly write values for identity columns
@@ -400,34 +412,37 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
                                         print(f"Temp table creation query: {create_temporary_table_query}")
                                         print(f"Query to insert into the temp table: {insert_into_temporary_table_query}")
                                         flag = False
+                                        successful_flag = False
 
                                 except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                     logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}.\nQuery: {create_temporary_table_query}")
                                     logging.error(f"Temp table creation query: {create_temporary_table_query}")
                                     cursor.connection.rollback()
                                     flag = False
+                                    successful_flag = False
                                 
                                 if flag:
                                     connection.commit()                           
                                     synchronized_databases.append(database_record)
 
-                                # except models.GroupTable.DoesNotExist as e:
-                                #     logging.error(f"No group table with name {group_table_name} exists in this group")
-                                #     errors.append(_("Table %(table_name)s does not exists in group %(group_name)s" % {'table_name': group_table_name, 'group_name': group.name } ))
-
                         except json.JSONDecodeError as e:
+                            successful_flag = False
                             logging.error( f"[In flux.views.GroupViewSet.synchronize]. Error parsing json from file for database synchronization. File path: {file_path}" )
+                            group_database_synchronization.delete()
 
                     zip_file.close()
                 except FileNotFoundError as e:
-                    flag = False 
+                    successful_flag = False 
                     logging.error( f"[In flux.GroupViewSet.synchronize]. Error opening file for database synchronization. File path: {file_path}" )
+                    # delete synchronization if the file is not found
+                    group_database_synchronization.delete()
 
-                group_database_synchronization.is_applied = True
-                group_database_synchronization.time_applied = timezone.now()
+                if successful_flag:
+                    group_database_synchronization.is_applied = True
+                    group_database_synchronization.time_applied = timezone.now()
 
-                applied_synchronizations.append( group_database_synchronization )
-                group_database_synchronization.save()
+                    applied_synchronizations.append( group_database_synchronization )
+                    group_database_synchronization.save()
             
             
             connection.close()

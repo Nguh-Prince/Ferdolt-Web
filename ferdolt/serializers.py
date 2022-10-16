@@ -246,7 +246,12 @@ class ColumnConstraintSerializer(serializers.ModelSerializer):
 class ServerSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Server
-        fields = ( "name", "address", "port", "location" )
+        fields = ( "id", "name", "address", "port", "location", "server_id" )
+        extra_kwargs = {
+            "server_id": {"read_only": True},
+            "port": {"required": False, "allow_null": True},
+            "address": {"required": False, "allow_null": True}
+        }
 
 class TableRecordsSerializer(serializers.Serializer):
     database = serializers.CharField(max_length=150)

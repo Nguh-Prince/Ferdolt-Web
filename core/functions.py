@@ -966,7 +966,7 @@ def insert_update_delete_trigger_query(
                     IF (TG_OP = 'DELETE') THEN 
                         BEGIN
                             INSERT INTO {table.schema.name}_{table.name}_deletion (row_tracking_id, deletion_time) 
-                            VALUES ( tables_ids.tracking_id, now() {"AT TIME ZONE 'UTC'" if use_timezone else ''} );
+                            VALUES ( OLD.tracking_id, now() {"AT TIME ZONE 'UTC'" if use_timezone else ''} );
                         END;
                     
                     ELSIF (TG_OP = 'UPDATE') THEN 
@@ -1216,7 +1216,6 @@ def initialize_database( database_record ):
                             logging.error(f"Error setting the tracking_id. Error: {str(e)}")
                             connection.rollback()
                             success_flag = False
-                            breakpoint()
                             raise e
 
                     except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
@@ -1348,7 +1347,10 @@ def initialize_database( database_record ):
                 try:
                     cursor.execute(query)
 
-                    column = ferdolt_models.Column.objects.get_or_create(name=column_name, table=table, data_type="varchar")
+                    column = ferdolt_models.Column.objects.get_or_create(
+                        name=column_name, table=table, data_type="varchar", 
+                        character_maximum_length=len(SERVER_ID) + 16
+                    )
                    
                     constraint.references_tracking_id = column[0]
                     constraint.save()
