@@ -542,11 +542,30 @@ class ColumnConstraintViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return models.ColumnConstraint.objects.all()
 
-class ServerViewSet(viewsets.ModelViewSet):
+class ServerViewSet(MultipleSerializerViewSet, viewsets.ModelViewSet):
     permission_classes = [ IsStaff ]
     serializer_class = serializers.ServerSerializer
+    serializer_classes = {
+        'delete': serializers.DeleteServersSerializer
+    }
 
     def get_queryset(self):
         return models.Server.objects.all()
 
+    @action(
+        methods=["DELETE"], detail=False
+    )
+    def delete(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        servers_to_delete = serializer.validated_data['servers']
+
+        for server in servers_to_delete:
+            server.delete()
+
+        return Response( data={"data": serializers.ServerSerializer(
+                servers_to_delete, many=True
+            ).data, "message": _("Successfully deleted %(count)d servers" % {'count': len(servers_to_delete)})
+        } )
 

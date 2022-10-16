@@ -24,12 +24,26 @@
         {% if not server %}
         .<div class="row">
             <div class="col-sm-12">
-                <div class="page-title-box">
-                    <div class="row justify-content-end">
+                <div class="page-title-box row">
+                    <div class="row col-md-6 justify-content-start">
+                        <div class="col-auto align-self-center d-none requires-select" id="delete-servers-button-container">
+                            <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#delete-server-confirmation-modal">
+                                <i data-feather="trash" class="small-icon"></i> {% trans "Delete server" %}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="row col-md-6 justify-content-end">
                         <div class="col-auto align-self-center">
                             <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
                                 data-bs-target="#new-server-modal">
-                                <i class="fas fa-plus me-2"></i>{% trans "Add server" %}
+                                <i data-feather="plus" class="small-icon me-2"></i>{% trans "Add server" %}
+                            </button>
+                        </div>
+
+                        <div class="col-auto align-self-center d-none requires-select" id="add-server-to-synchronization-group">
+                            <button class="btn btn-outline-orange btn-sm add-file" data-bs-toggle="modal" data-bs-target="#">
+                                {% trans "Add databases to synchronization group" %}
                             </button>
                         </div>
                     </div>
@@ -38,19 +52,7 @@
         </div>
 
         <div class="row py-2" id="servers">
-            {% for server in servers %}
-            <!-- <div class="card mx-1" style="width: 18rem;" id="server-{{ server.id }}">
-                <div class="card-body">
-                    <h5 class="card-title">{{ server.name }}</h5>
-                    <h6 class="card-subtitle">
-                        Server ID: {{ server.server_id }}
-                    </h6>
-                    <p class="card-text">
-                        Location: {{ server.location }}
-                    </p>
-                </div>
-            </div> -->
-            {% endfor %}
+            
         </div>
         {% else %}
         {% endif %}
@@ -144,6 +146,30 @@
         </div>
     </div>
 </div>
+
+<div class="modal" id="delete-server-confirmation-modal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">
+                    
+                </div>
+            </div>
+            <div class="modal-body">
+                <p style="text-danger">This action will delete the following databases</p>
+                <ul>
+                    <li>Labore ea sunt dolore ad labore est in aliquip proident tempor laborum aliqua.</li>
+                    <li>Culpa minim veniam exercitation veniam anim dolore elit reprehenderit cillum dolore veniam ipsum ullamco Lorem.</li>
+                    <li>Et culpa tempor labore duis laboris pariatur magna aliqua tempor eu proident sint.</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button data-bs-dismiss="modal" class="btn btn-blue">{% trans "No" %}</button>
+                <button id="confirm-server-deletion" class="btn btn-danger">{% trans "Yes" %}</a>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -175,8 +201,47 @@
         }
     } )
 
+    $("#confirm-server-deletion").click( function() {
+        deleteSelectedServers()
+    } )
+
     function setSelectedServers(selectedServers) {
+        console.log("Calling setSelectedServers")
+
         SELECTED_SERVERS = selectedServers
+        
+        let numberOfSelectedServers = SELECTED_SERVERS.length
+        console.log(`The number of selected servers is ${numberOfSelectedServers}`)
+
+        if (numberOfSelectedServers < 1) {
+            $('.requires-select').addClass('d-none')
+
+            $("#delete-server-confirmation-modal .modal-title").text('')
+            $("#delete-server-confirmation-modal .modal-title").html('')
+            $("#delete-server-confirmation-modal .modal-body").html('')
+        } else {
+            $('.requires-select').removeClass('d-none')
+            let deleteServersString = numberOfSelectedServers == 1 ? "Delete server" : `Delete servers (${numberOfSelectedServers})`
+            let addServersToGroupString = numberOfSelectedServers == 1 ? "Add server to a group" : `Add servers to a group (${numberOfSelectedServers})`
+
+            $("#delete-server-confirmation-modal .modal-body").text('Are you sure you want to delete the following databases?')
+            let listOfServers = createElement('ul', [], null)
+            
+            let selectedServersString = SELECTED_SERVERS.map( (server) => { 
+                let serverInList = createElement('li', [], {textContent: `${server.name} with id ${server.server_id} on ${server.address}`})    
+                $(listOfServers).append(serverInList)
+
+                return server.name 
+            } ).join( ', ' )
+
+            $("#add-server-to-synchronization-group button").text(addServersToGroupString)
+            $("#delete-servers-button-container button").text(deleteServersString)
+
+            console.log(`In setSelectedServers, the selected servers are: ${selectedServersString}`)
+
+            $("#delete-server-confirmation-modal .modal-title").text(`Are you sure you want to delete: ${selectedServersString}`)
+            $("#delete-server-confirmation-modal .modal-body").append( listOfServers )
+        }
     }
 
     function submitNewServer() {
@@ -194,10 +259,9 @@
                 "X-CSRFTOKEN": getCsrfTokenCookie()
             },
             data: formData,
-            // contentType: 'application/json',
             success: function (data) {
                 console.log("Gotten the servers from the API")
-                displayMessage("Server added successfully.", ["alert", "alert-dismissible"])
+                displayMessage("Server added successfully.", ["alert", "alert-dismissible", "alert-success"])
 
                 state.servers.push(data)
                 displayServer(data)
@@ -207,69 +271,6 @@
                 console.log(data.responseJSON)
             }
         })
-
-        function displayServers() {
-            console.log("In displayServers(): ")
-            console.log(state.servers)
-
-            for (let server of state.servers) {
-                displayServer(server)
-            }
-        }
-
-        function displayServer(server, parentContainerSelector="#servers") {
-            let card = createElementsRecursively(
-                {
-                    tag: "div",
-                    classes: ["card", "mx-1"],
-                    attributes: { style: "width: 18rem;", id: `server-${server['id']}` },
-                    elements: [
-                        {
-                            tag: "div",
-                            classes: ["card-body"],
-                            attributes: {},
-                            elements: [
-                                {
-                                    tag: "h5",
-                                    classes: ["card-title", "py-2"],
-                                    attributes: {}
-                                },
-                                {
-                                    tag: "h6",
-                                    classes: ["card-subtitle", "mb-2", "text-muted"]
-                                },
-                                {
-                                    tag: "p",
-                                    classes: ["card-text", "server-host"]
-                                },
-                                {
-                                    tag: "p",
-                                    classes: ["card-text", "server-port"]
-                                },
-                                {
-                                    tag: "a",
-                                    classes: ["btn", "btn-primary", "server-detail-link"],
-                                    attributes: { href: `${location.pathname}${server['id']}` }
-                                },
-                            ]
-                        }
-                    ]
-                }
-            )
-
-            $(card).find(".card-title").text(server["name"])
-
-            $(card).find('.card-subtitle').text(`${server['version']['dbms_object']['name']} ${server['version']['version_number']}`)
-            $('.card')
-
-            $(card).find('.server-host').text(`Host: ${server['host']}`)
-            $(card).find('.server-port').text(`Port: ${server['port']}`)
-
-            $(card).find('.server-detail-link').text("Details")
-
-            $(parentContainerSelector).append( card )
-        }
-
     }
 
     function displayServer(serverObject, containerSelector="#servers") {
@@ -448,6 +449,41 @@
                 displayRequestErrors(data)
             }
         })
+    }
+
+    function deleteSelectedServers() {
+        if (SELECTED_SERVERS.length >= 1) {
+            let formData = SELECTED_SERVERS.map( (item) => { return item.id } )
+            
+            console.log("Making request to delete the following servers. The data is: ")
+            console.log(formData)
+
+            $.ajax({
+                type: "DELETE",
+                url: `http://${location.host}/${API_BASE_URL}ferdolt/servers/delete/`,
+                data: JSON.stringify({
+                    servers: formData
+                }),
+                headers: {
+                    'X-CSRFTOKEN': getCsrfTokenCookie()
+                },
+                contentType: "application/json",
+                success: function(data) {
+                    displayMessage(`Successfully deleted ${SELECTED_SERVERS.length} databases`, ['alert', 'alert-success'])
+
+                    state.servers = state.servers.filter( (server) => {
+                        return !formData.includes( server.id )
+                    } )
+
+                    displayServers(state.servers)
+                },
+                error: function(data) {
+                    displayRequestErrors( data )
+                    console.log("Error deleting databases, error: ")
+                    console.log(data.responseText)
+                }
+            })
+        }
     }
 </script>
 {% endblock %}

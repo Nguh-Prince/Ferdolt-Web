@@ -253,6 +253,26 @@ class ServerSerializer(serializers.ModelSerializer):
             "address": {"required": False, "allow_null": True}
         }
 
+class DeleteServersSerializer(serializers.Serializer):
+    servers = serializers.ListField(child=serializers.IntegerField())
+
+    def validate_servers(self, data):
+        validation_errors = []
+        for index, server_id in enumerate(data):
+            server = models.Server.objects.filter(id=server_id).first()
+
+            if not server:
+                validation_errors.append(
+                    serializers.ValidationError( _("Error on item at position %(position)d on the servers list. No server exists with id %(server_id)d" % { 'position': index+1, 'server_id': server_id }) )
+                )
+            else:
+                data[index] = server
+
+        if len(validation_errors) > 0:
+            raise serializers.ValidationError( validation_errors )
+            
+        return data
+
 class TableRecordsSerializer(serializers.Serializer):
     database = serializers.CharField(max_length=150)
     schema = serializers.CharField(max_length=150)
