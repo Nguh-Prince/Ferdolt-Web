@@ -546,7 +546,8 @@ class ServerViewSet(MultipleSerializerViewSet, viewsets.ModelViewSet):
     permission_classes = [ IsStaff ]
     serializer_class = serializers.ServerSerializer
     serializer_classes = {
-        'delete': serializers.DeleteServersSerializer
+        'delete': serializers.DeleteServersSerializer,
+        'add_to_group': serializers.AddServersToGroupsSerializer
     }
 
     def get_queryset(self):
@@ -569,3 +570,17 @@ class ServerViewSet(MultipleSerializerViewSet, viewsets.ModelViewSet):
             ).data, "message": _("Successfully deleted %(count)d servers" % {'count': len(servers_to_delete)})
         } )
 
+    @action(
+        methods=["POST"], detail=False
+    )
+    def add_to_group(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+
+        servers_to_add = serializer.validated_data['servers']
+        groups = serializer.validated_data['groups']
+
+        for group in groups:
+            for server in servers_to_add:
+                pass

@@ -11,6 +11,7 @@ from core.functions import decrypt, encrypt, initialize_database
 
 from ferdolt_web import settings
 from frontend.views import get_database_connection
+from groups import models as groups_models
 
 from . import models
 
@@ -270,7 +271,28 @@ class DeleteServersSerializer(serializers.Serializer):
 
         if len(validation_errors) > 0:
             raise serializers.ValidationError( validation_errors )
-            
+
+        return data
+
+class AddServersToGroupsSerializer(DeleteServersSerializer):
+    groups = serializers.ListField(child=serializers.IntegerField())
+
+    def validate_groups(self, data):
+        validation_errors = []
+
+        for index, group_id in enumerate(data):
+            group = groups_models.Group.objects.filter(id=group_id)
+
+            if not group:
+                validation_errors.append(
+                    serializers.ValidationError( _("Error on item at position %(position)d on the groups list. No group exists with id %(group_id)d" % { 'position': index+1, 'group_id': group_id }) )
+                )
+            else:
+                data[index] = group
+
+        if len(validation_errors) > 0:
+            raise serializers.ValidationError( validation_errors )
+
         return data
 
 class TableRecordsSerializer(serializers.Serializer):

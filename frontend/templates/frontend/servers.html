@@ -474,6 +474,7 @@
                     state.servers = state.servers.filter( (server) => {
                         return !formData.includes( server.id )
                     } )
+                    setSelectedServers([])
 
                     displayServers(state.servers)
                 },

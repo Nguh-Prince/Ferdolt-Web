@@ -1,3 +1,4 @@
+import hashlib
 from ipaddress import ip_address
 import re
 import string
@@ -19,3 +20,17 @@ def is_valid_ip_address(ip):
 
 def generate_random_string(length=8):
     random_string = random.choices( string.ascii_letters + string.digits + string.punctuation, k=length )
+
+    return random_string
+    
+def hash_file(filename):
+    h = hashlib.sha256()
+
+    with open(filename, 'rb') as file:
+        chunk = 0
+
+        while chunk != b'':
+            chunk = file.read(1024)
+            h.update(chunk)
+
+    return h.hexdigest()

@@ -356,12 +356,12 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
                                                 (SELECT { ', '.join( [ column for column in table_columns ] ) } FROM {temporary_table_actual_name}) 
                                                 ON CONFLICT ( { ', '.join( [ column for column in primary_key_columns ] ) if use_primary_keys_for_verification else tracking_id_column } )
                                                 DO 
-                                                    UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) if use_primary_keys_for_verification else ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns) }
+                                                    UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) if use_primary_keys_for_verification else ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column != tracking_id_column ) }
                                                 """
                                             
                                         else:
                                             if len(primary_key_columns) == 1:
-                                                if dbms_booleans["is_postgres_db"]:
+                                                if dbms_booleans["is_sqlserver_db"]:
                                                     merge_query = f"""
                                                     merge {schema_name}.{table_name} as t USING {temporary_table_actual_name} AS s ON (
                                                         {
@@ -385,6 +385,7 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
                                                 logging.error(f"Could not delete from {table.__str__()} table as it has a composite primary key")
 
                                         try:
+                                            breakpoint()
                                             if merge_query: 
                                                 cursor.execute(merge_query)
                                         except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
@@ -392,6 +393,7 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
                                             logging.error(f"The temporary tables that have been created are: {temporary_tables_created}")
                                             flag = False
                                             successful_flag = False
+
                                         except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
                                             logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
                                             logging.error(f"The temporary tables that have been created are: {temporary_tables_created}")
