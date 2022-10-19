@@ -105,6 +105,8 @@ def extract_from_groupdatabase(
                         if table_results:
                             table_dictionary.setdefault( "rows", table_results )
 
+                        breakpoint()
+
                     except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                         logging.error(f"Error occured when extracting from {group_database.database}.{item.schema.name}.{item.name}. Error: {str(e)}")
                         raise e
@@ -188,7 +190,7 @@ def extract_from_groupdatabase(
                             group_database=database, is_applied=False
                         )
                         flux_models.ExtractionTargetDatabase.objects.create(
-                            extraction=extraction, database=database.databse, is_applied=False
+                            extraction=extraction, database=database.database, is_applied=False
                         )
 
                 os.unlink( file_name )
@@ -314,16 +316,59 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
                                         
                                         cursor.executemany(insert_into_temporary_table_query, rows_to_insert)
 
+                                        # modify the foreign keys in the table
+                                        for constraint in ferdolt_models.ColumnConstraint.objects.filter(
+                                            column__table=table, is_foreign_key=True, references_tracking_id__isnull=False, 
+                                            references__isnull=False
+                                        ):
+                                            column = constraint.column
+                                            referenced_column = constraint.references
+                                            referenced_table = referenced_column.table
+                                            tracking_id_referencing_column = constraint.references_tracking_id
+
+                                            referenced_table_tracking_id_name = "tracking_id"
+
+                                            query = f"""
+                                            UPDATE {temporary_table_actual_name} SET {column.name} = subquery.{referenced_column.name} 
+                                            FROM ( SELECT {referenced_column.name}, {referenced_table_tracking_id_name} FROM {referenced_table.get_queryname()} ) subquery 
+                                            WHERE subquery.{referenced_table_tracking_id_name}={temporary_table_actual_name}.{tracking_id_referencing_column.name}
+                                            """
+
+                                            breakpoint()
+
+                                            try:
+                                                cursor.execute(query)
+                                            except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
+                                                logging.error(f"Error occured when modifying the foreign keys in the temporary table. Error: {str(e)}")
+                                                logging.error(f"Query to execute: {query}")
+                                                connection.rollback()
+                                                successful_flag = False
+
+                                                raise e
+
+                                                # UPDATE film_actor SET film_id_tracking_id = subquery1.tracking_id 
+                                                # FROM (SELECT film_id, tracking_id FROM film) subquery1 
+                                                # WHERE subquery1.film_id=film_actor.actor_id
+
                                         if dbms_booleans['is_sqlserver_db']:
                                             # set identity_insert on to be able to explicitly write values for identity columns
                                             try:
                                                 cursor.execute(f"SET IDENTITY_INSERT {schema_name}.{table_name} ON")
                                             except pyodbc.ProgrammingError as e:
                                                 logging.error(f"Error occured when setting identity_insert on for {schema_name}.{table_name} table")
+                                                connection.rollback()
+                                                successful_flag = False
+                                                raise e
 
                                         merge_query = None
                                         
                                         tracking_id_column = "tracking_id"
+
+                                        if len(primary_key_columns) == 1:
+                                            non_primary_key_columns_list = [ column for column in table_columns if column not in primary_key_columns ]
+                                            non_primary_key_columns_list_string = ', '.join(non_primary_key_columns_list)
+                                        else:
+                                            non_primary_key_columns_list_string = ', '.join( table_columns )
 
                                         if not deletion_table_regex.search(table_name):
                                             merge_query = ""
@@ -352,11 +397,12 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
 
                                             elif dbms_booleans['is_postgres_db']:
                                                 merge_query = f"""
-                                                INSERT INTO {schema_name}.{table_name} ( { ', '.join( [ column for column in table_columns ] ) } ) 
-                                                (SELECT { ', '.join( [ column for column in table_columns ] ) } FROM {temporary_table_actual_name}) 
+                                                INSERT INTO {schema_name}.{table_name} AS source ( { non_primary_key_columns_list_string } ) 
+                                                (SELECT { non_primary_key_columns_list_string } FROM {temporary_table_actual_name}) 
                                                 ON CONFLICT ( { ', '.join( [ column for column in primary_key_columns ] ) if use_primary_keys_for_verification else tracking_id_column } )
                                                 DO 
-                                                    UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) if use_primary_keys_for_verification else ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column != tracking_id_column ) }
+                                                    UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) if use_primary_keys_for_verification else ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column != tracking_id_column ) } 
+                                                    WHERE EXCLUDED.last_updated > source.last_updated;
                                                 """
                                             
                                         else:
@@ -385,7 +431,6 @@ def synchronize_group(group: models.Group, use_primary_keys_for_verification=Fal
                                                 logging.error(f"Could not delete from {table.__str__()} table as it has a composite primary key")
 
                                         try:
-                                            breakpoint()
                                             if merge_query: 
                                                 cursor.execute(merge_query)
                                         except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:

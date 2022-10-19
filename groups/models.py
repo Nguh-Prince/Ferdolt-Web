@@ -65,7 +65,7 @@ class Group(models.Model):
     def save(self, *args, **kwargs):
         self.name = self.name.lower()
         self.slug = slugify(self.name)
-
+        breakpoint()
         return super().save(*args, **kwargs)
 
     def get_fernet_key(self):
@@ -73,6 +73,10 @@ class Group(models.Model):
 
 DEFAULT_EXTRACTION_FREQUENCY = 1
 DEFAULT_SYNCHRONIZATION_FREQUENCY = 1
+
+class GroupServer(models.Model):
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    server = models.ForeignKey(ferdolt_models.Server, on_delete=models.CASCADE, null=True)
 
 class GroupDatabase(models.Model):
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE, null=True)

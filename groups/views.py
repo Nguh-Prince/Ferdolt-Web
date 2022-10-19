@@ -17,7 +17,9 @@ import psycopg
 from rest_framework import permissions as drf_permissions
 from rest_framework import status
 from rest_framework import viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, parser_classes
+from rest_framework.parsers import FileUploadParser
+
 from rest_framework.response import Response
 from common.permissions import IsStaff
 from common.responses import get_error_response
@@ -222,12 +224,12 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         methods=['GET'],
         detail=True
     )
-    def extractions(self, request, *args, **kwargs):
-        object = self.get_object()
+    # def extractions(self, request, *args, **kwargs):
+    #     object = self.get_object()
 
-        extractions = Extraction.objects.filter( groupextraction__group=object )
+    #     extractions = Extraction.objects.filter( groupextraction__group=object )
 
-        return Response( ExtractionSerializer(extractions, many=True).data )
+    #     return Response( ExtractionSerializer(extractions, many=True).data )
 
     @action(
         methods=['POST'],
@@ -275,13 +277,10 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
                                     database_record = table.schema.database
                                     connection = get_database_connection( database_record )
-                                    breakpoint()
 
                                     if connection:
                                         cursor = connection.cursor()
                                         dbms_booleans = get_dbms_booleans(database_record)
-                                        
-                                        breakpoint()
 
                                         table_columns = [ f["column__name"].lower() for f in models.GroupColumnColumn.objects.filter( group_column__in=group_table_columns, column__table=table ).values("column__name") ] 
                                         
@@ -371,8 +370,6 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                                         DO 
                                                             UPDATE SET { ', '.join( f"{column} = EXCLUDED.{column}" for column in table_columns if column not in primary_key_columns ) }
                                                         """
-                                                    
-                                                    breakpoint()
                                                 else:
                                                     if len(primary_key_columns) == 1:
                                                         if dbms_booleans["is_postgres_db"]:
@@ -548,16 +545,22 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                             return get_error_response()
 
                 # query to get the columns that are in this table but not in the group
-                table_columns_query = table_columns.filter( ~Q(name__in=group_table.columns.values("name")) )
+                table_columns_query = table_columns.filter( 
+                    ~Q(name__in=group_table.columns.values("name")) 
+                )
 
                 for column in table_columns:
                     if column in table_columns_query:
                         # create a new groupcolumn
-                        group_column = models.GroupColumn.objects.create(name=column.name, group_table=group_table, 
-                        data_type=column.data_type, is_nullable=column.is_nullable)
+                        group_column = models.GroupColumn.objects.create(
+                            name=column.name, group_table=group_table, 
+                            data_type=column.data_type, is_nullable=column.is_nullable
+                        )
                     else:
                         try:
-                            group_column = models.GroupColumn.objects.get(name=column.name, group_table=group_table)
+                            group_column = models.GroupColumn.objects.get(
+                                name=column.name, group_table=group_table
+                            )
                         except models.GroupColumn.DoesNotExist as e:
                             logging.error(f"Error when creating full synchronization group. Error: {str(e)}")
                             return get_error_response()
@@ -611,3 +614,35 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         return Response(
             data=serializers.GroupDatabaseSerializer(group_database).data
         )
+
+class GroupExtractionViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
+    serializer_class = serializers.GroupExtractionSerializer
+    permission_classes = [ IsStaff, ]
+
+    group_lookup_key = "parent_lookup_group"
+
+    def get_queryset(self):
+        if self.group_lookup_key in self.kwargs:
+            self.group = models.Group.objects.filter(id=self.kwargs[self.group_lookup_key]).first()
+
+            return models.GroupExtraction.objects.filter(
+                group__id=self.kwargs[self.group_lookup_key]
+            )
+
+        return models.GroupExtraction.objects.all()
+
+    @action(methods=['POST'], detail=False)
+    @parser_classes( [FileUploadParser, ] )
+    def upload(self, request):
+        if not self.group_lookup_key in self.kwargs:
+            return Response( data={'message': "This method can only be accessed from within a group"}, status=status.HTTP_405_METHOD_NOT_ALLOWED )
+        
+        file_name = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}" ) + ".zip"
+
+        up_file = request.FILES['file']
+        
+        with open(file_name) as __:
+            for chunk in up_file.chunks:
+                __.write(chunk)
+        
+        return Response( {"message": _("File %(name)s uploaded successfully" % { 'name': up_file.name })} )

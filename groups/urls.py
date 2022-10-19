@@ -10,5 +10,9 @@ router = NestedDefaultRouter()
 
 group_routes = router.register("", 
 views.GroupViewSet, basename="groups")
+group_routes.register(
+    "extractions", views.GroupExtractionViewSet, 
+    basename='group-extractions', parents_query_lookups=["group"]
+)
 
 urlpatterns = router.urls

@@ -27,6 +27,7 @@ from ferdolt_web.settings import FERNET_KEY
 
 from flux import models as flux_models
 from flux.serializers import ExtractionSerializer
+from groups.models import GroupServer
 
 from . import serializers
 from . import  permissions
@@ -313,7 +314,6 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
             connection.close()
         else:
-            breakpoint()
             return Response( data={'message': """Error connecting to the database. 
             Please check your credentials and ensure your database is running"""}, 
             status=status.HTTP_400_BAD_REQUEST )
@@ -347,7 +347,6 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
             columns_in_common = [ column['name'] for column in table_column_set if column['name'] in record.keys() ]
             
             values_to_insert = tuple( record[f] for f in columns_in_common )
-            breakpoint()
             query = f"""
             INSERT INTO {table.schema.name}.{table.name} ( { ', '.join( columns_in_common ) } ) VALUES ( { ', '.join( [ '?' for _ in columns_in_common] ) } )
             """
@@ -436,7 +435,6 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                 logging.error(f"Error execuing update query. Query: {query}")
                 return Response( data={'message': "Error updating records"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR )
             except (pyodbc.Error, psycopg.Error) as e:
-                breakpoint()
                 logging.error(f"Error execuing update query. Query: {query}")
                 return Response( data={'message': "Error updating records"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR )
 
@@ -478,8 +476,6 @@ class TableViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
             DELETE FROM {table.schema.name}.{table.name} WHERE 
             { " AND ".join( f"{key}=?" for key in columns_in_common ) }
             """
-
-            breakpoint()
 
             try:
                 cursor.execute(query, values_to_insert)
@@ -581,6 +577,12 @@ class ServerViewSet(MultipleSerializerViewSet, viewsets.ModelViewSet):
         servers_to_add = serializer.validated_data['servers']
         groups = serializer.validated_data['groups']
 
+        group_servers = []
+
         for group in groups:
             for server in servers_to_add:
-                pass
+                group_servers.append(
+                    GroupServer.objects.create( group=group, server=server )
+                )
+
+        return Response( data={"message": _("Successfully added the servers to the groups")} )

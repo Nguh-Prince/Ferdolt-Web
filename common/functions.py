@@ -4,6 +4,12 @@ import re
 import string
 import random
 
+from django.core.mail import send_mail
+from django.contrib.auth.models import User
+from django.db.models import Q
+
+from ferdolt_web import settings
+
 def is_valid_hostname(hostname):
     if len(hostname) > 255:
         return False
@@ -22,7 +28,7 @@ def generate_random_string(length=8):
     random_string = random.choices( string.ascii_letters + string.digits + string.punctuation, k=length )
 
     return random_string
-    
+
 def hash_file(filename):
     h = hashlib.sha256()
 
@@ -34,3 +40,14 @@ def hash_file(filename):
             h.update(chunk)
 
     return h.hexdigest()
+
+def send_email_to_admins(subject, message):
+    recipient_list = User.objects.filter(
+        Q(groups__name__iexact='admin') | Q(is_superuser=True)
+    ).filter(
+        email__isnull=False
+    )
+
+    email_from = settings.EMAIL_HOST_USER
+
+    send_mail(subject, message, email_from, recipient_list)
