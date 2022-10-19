@@ -1,3 +1,4 @@
+from email.policy import default
 import logging
 from random import choices
 import string
@@ -65,7 +66,6 @@ class Group(models.Model):
     def save(self, *args, **kwargs):
         self.name = self.name.lower()
         self.slug = slugify(self.name)
-        breakpoint()
         return super().save(*args, **kwargs)
 
     def get_fernet_key(self):
@@ -183,6 +183,7 @@ class GroupExtraction(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
     source_database = models.ForeignKey(GroupDatabase, on_delete=models.SET_NULL, null=True)
+    source_server = models.ForeignKey(GroupServer, on_delete=models.SET_NULL, null=True)
 
 class GroupDatabaseSynchronization(models.Model):
     group_database = models.ForeignKey(GroupDatabase, on_delete=models.CASCADE)
@@ -201,3 +202,8 @@ class GroupDatabaseSynchronization(models.Model):
 
         return super().save(*args, **kwargs)
 
+class GroupServerSynchronization(models.Model):
+    group_server = models.ForeignKey(GroupServer, on_delete=models.CASCADE)
+    extraction = models.ForeignKey(Group, on_delete=models.CASCADE)
+    is_applied = models.BooleanField(default=False)
+    time_applied = models.DateTimeField(null=True)

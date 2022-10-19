@@ -309,8 +309,8 @@ def initialize(request, id: int):
         # try to connect to the database
         database: ferdolt_models.Database = query.first()
 
-        # ferdolt_tasks.initialize_database(database.id)
-        initialize_database(database)
+        ferdolt_tasks.initialize_database(database.id)
+        # initialize_database(database)
 
         return redirect(f"/databases/{id}")
 

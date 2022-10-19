@@ -224,12 +224,6 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         methods=['GET'],
         detail=True
     )
-    # def extractions(self, request, *args, **kwargs):
-    #     object = self.get_object()
-
-    #     extractions = Extraction.objects.filter( groupextraction__group=object )
-
-    #     return Response( ExtractionSerializer(extractions, many=True).data )
 
     @action(
         methods=['POST'],
@@ -526,6 +520,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                 table_database = table.schema.database
                 
                 # create the group tables based on the tables in the source databases
+                # table has not been added to the group, create a new group table and a grouptabletable for the table
                 if group_table_name not in group_tables_names and table_database in source_databases_set:
                     logging.info(f"Creating a new group table with name {group_table_name}")
 
@@ -534,6 +529,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                     group_tables_names.add(group_table_name)
                     logging.info(f"Linking the {table} table to the {group_table} table")
                 else:
+                    # table already exists in the group, create the grouptabletable for the table
                     try:
                         group_table = models.GroupTable.objects.get(name=group_table_name, group=group)
                         models.GroupTableTable.objects.create(group_table=group_table, table=table)
@@ -556,7 +552,9 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                             name=column.name, group_table=group_table, 
                             data_type=column.data_type, is_nullable=column.is_nullable
                         )
+                        logging.info(f"Creating the {column.name} column in the {group_table.name} table in the {group.name} group")
                     else:
+                        # get the existing group column from the database
                         try:
                             group_column = models.GroupColumn.objects.get(
                                 name=column.name, group_table=group_table
@@ -564,8 +562,11 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                         except models.GroupColumn.DoesNotExist as e:
                             logging.error(f"Error when creating full synchronization group. Error: {str(e)}")
                             return get_error_response()
-
+                    
+                    # link the group column to the table column
                     models.GroupColumnColumn.objects.create(group_column=group_column, column=column)
+                    logging.info("Linked the {column.name} column in the {column.table.__str__()} table to the {group_column.name} column in the {group_table.name} table in {group_table.group} group")
+                    print("Linked the {column.name} column in the {column.table.__str__()} table to the {group_column.name} column in the {group_table.name} table in {group_table.group} group")
 
             # link the table
             for table in ferdolt_models.Table.objects.filter(schema__database__in=participant_databases_set - source_databases_set):
@@ -614,6 +615,12 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         return Response(
             data=serializers.GroupDatabaseSerializer(group_database).data
         )
+
+    # @action(
+    #     methods=["POST"],
+    #     detail=True
+    # )
+    # def 
 
 class GroupExtractionViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     serializer_class = serializers.GroupExtractionSerializer

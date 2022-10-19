@@ -112,19 +112,19 @@ TEMPLATES = [
 WSGI_APPLICATION = 'ferdolt_web.wsgi.application'
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'old_db.sqlite3',
-        "ATOMIC_REQUESTS": True,
-    }
     # 'default': {
-    #     'ENGINE': 'django.db.backends.postgresql_psycopg2',
-    #     'NAME': env("DATABASE_NAME"),
-    #     'USER': env('DATABASE_USERNAME'),
-    #     'PASSWORD': env('DATABASE_PASSWORD'),
-    #     'HOST': env('DATABASE_HOST'),
-    #     'PORT': env('DATABASE_PORT')
+    #     'ENGINE': 'django.db.backends.sqlite3',
+    #     'NAME': BASE_DIR / 'old_db.sqlite3',
+    #     "ATOMIC_REQUESTS": True,
     # }
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': env("DATABASE_NAME"),
+        'USER': env('DATABASE_USERNAME'),
+        'PASSWORD': env('DATABASE_PASSWORD'),
+        'HOST': env('DATABASE_HOST'),
+        'PORT': env('DATABASE_PORT')
+    }
 }
 
 # HUEY = {

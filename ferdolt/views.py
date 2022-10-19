@@ -84,10 +84,12 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
         database = serializer.create(serializer.validated_data)
         data = {'data': serializers.DatabaseSerializer(database).data}
+        
         try:
-            get_database_details(database)
+            tasks.initialize_database(database.id)
+            # get_database_details(database)
             data = {'data': serializers.DatabaseSerializer(database).data, 
-            'message': _("Successfully got the database's details")}
+            'message': _("The database is being initialized.")}
 
         except InvalidDatabaseConnectionParameters as e:
             logging.error(f"Error connecting to the {database.__str__()}.")
@@ -262,7 +264,6 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
 
         return Response( data={'message': _("Error connecting to the database. Please check that your server is running and your connection credentials are correct.")}, status=status.HTTP_400_BAD_REQUEST )
         
-
 class DatabaseSchemaViewSet(viewsets.ModelViewSet):
     permission_classes = [ IsStaff ]
     serializer_class = serializers.DatabaseSchemaSerializer
@@ -586,3 +587,4 @@ class ServerViewSet(MultipleSerializerViewSet, viewsets.ModelViewSet):
                 )
 
         return Response( data={"message": _("Successfully added the servers to the groups")} )
+

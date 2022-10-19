@@ -400,33 +400,34 @@ def create_database_objects_records_from_structure_dictionary( database, diction
         for table in schema_dictionary.keys():
             table_record: ferdolt_models.Table = ferdolt_models.Table.objects.get_or_create(schema=schema_record, name=table.lower())[0]
             table_dictionary = schema_dictionary[table]
-
             for column in table_dictionary.keys():
                 column_dictionary = table_dictionary[column]
                 try:
-                    column_record = ferdolt_models.Column.objects.get_or_create(table=table_record, name=column)[0]
-                    
-                    column_record.data_type = column_dictionary['data_type']
-                    column_record.datetime_precision = column_dictionary['datetime_precision']
-                    column_record.character_maximum_length = column_dictionary['character_maximum_length']
-                    column_record.numeric_precision = column_dictionary['numeric_precision']
-                    column_record.is_nullable = column_dictionary['is_nullable']
-                    column_record.save()
-
-                    column_record.columnconstraint_set.all().delete()
-
-                    for constraint in column_dictionary['constraint_type']:
-                        primary_key_regex = re.compile("primary key", re.I)
-                        foreign_key_regex = re.compile("foreign key", re.I)
+                    if column_dictionary['data_type'] in data_types:
+                        column_record = ferdolt_models.Column.objects.get_or_create(table=table_record, name=column)[0]
                         
-                        if constraint:
-                            if primary_key_regex.search(constraint):
-                                ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_primary_key=True)
-                            
-                            if foreign_key_regex.search(constraint):
-                                ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_foreign_key=True)
+                        column_record.data_type = column_dictionary['data_type']
+                        column_record.datetime_precision = column_dictionary['datetime_precision']
+                        column_record.character_maximum_length = column_dictionary['character_maximum_length']
+                        column_record.numeric_precision = column_dictionary['numeric_precision']
+                        column_record.is_nullable = column_dictionary['is_nullable']
+                        column_record.save()
 
-                    get_table_foreign_key_references(table_record)
+                        column_record.columnconstraint_set.all().delete()
+
+                        for constraint in column_dictionary['constraint_type']:
+                            primary_key_regex = re.compile("primary key", re.I)
+                            foreign_key_regex = re.compile("foreign key", re.I)
+                            
+                            if constraint:
+                                if primary_key_regex.search(constraint):
+                                    ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_primary_key=True)
+                                
+                                if foreign_key_regex.search(constraint):
+                                    ferdolt_models.ColumnConstraint.objects.create(column=column_record, is_foreign_key=True)
+
+                        get_table_foreign_key_references(table_record)
+
                 except ferdolt_models.Column.MultipleObjectsReturned as e:
                     logging.error(f"Error when trying to get column {column} from table {table}. Error: {str(e)}")
                     print(f"Error when trying to get column {column} from table {table}. Error: {str(e)}")
@@ -745,7 +746,7 @@ def set_tracking_id_where_null_query(table_name, schema_name, primary_key_column
             --    IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table_name}' AND TABLE_SCHEMA='{schema_name}' AND COLUMN_NAME='{column_name}') THEN 
             --        BEGIN
             --            FOR table_ids IN SELECT {primary_key_column} FROM {schema_name}.{table_name} WHERE tracking_id IS NULL LIMIT {batch_size} LOOP 
-            --                UPDATE {schema_name}.{table_name} SET {column_name} = '{server_id}' || to_char( now(), 'yyyyMMddhhmmss' ) 
+            --                UPDATE {schema_name}.{table_name} SET {column_name} = '{server_id}' || to_char( now(), 'YYYYMMDDHH24MISS' ) 
             --                || LPAD( CAST( nextval('{sequence_name}') AS VARCHAR ), 2, '0' ) 
             --                WHERE {primary_key_column} = table_ids.{primary_key_column};
             --            END LOOP;
@@ -831,7 +832,7 @@ def set_tracking_id_where_null_query_multiple_primary_keys(table, primary_key_co
                     BEGIN
                         FOR table_ids IN SELECT { ', '.join( [f"{column.name}" for column in primary_key_columns] ) } 
                         FROM {schema_name}.{table_name} WHERE {column_name} IS NULL LOOP 
-                            UPDATE {schema_name}.{table_name} SET {column_name} = '{server_id}' || to_char( now(), 'yyyyMMddhhmmss' ) 
+                            UPDATE {schema_name}.{table_name} SET {column_name} = '{server_id}' || to_char( now(), 'YYYYMMDDHH24MISS' ) 
                             || LPAD( CAST( nextval('{sequence_name}') AS VARCHAR ), 2, '0' ) 
                             WHERE { " AND ".join( [ f"{column.name} = table_ids.{column.name}" for column in primary_key_columns ] ) };
                         END LOOP;
@@ -984,7 +985,7 @@ def insert_update_delete_trigger_query(
                     ELSIF (TG_OP = 'INSERT') THEN 
                         IF NEW.tracking_id IS NULL THEN 
                             BEGIN
-                                UPDATE {table.get_queryname()} SET tracking_id = '{SERVER_ID}' || TO_CHAR( now(), 'yyyyMMddhhmmss' ) 
+                                UPDATE {table.get_queryname()} SET tracking_id = '{SERVER_ID}' || TO_CHAR( now(), 'YYYYMMDDHH24MISS' ) 
                                 || LPAD( CAST(nextval('{sequence_name}') AS VARCHAR), 2, '0' ), last_updated=CURRENT_TIMESTAMP  
                                 WHERE { " AND ".join( [ f"{column}=NEW.{column}" for column in primary_key_column_names ] ) };
                             END;
@@ -1458,6 +1459,8 @@ def initialize_database( database_record ):
             database_record.is_initialized = True
             database_record.save()
 
+            add_and_populate_foreign_tracking_id_columns()
+
     except InvalidDatabaseConnectionParameters as e:
         raise e
 
@@ -1478,9 +1481,8 @@ def replace_triggers( database_record ):
 
             # create and record the deletion table in the local dbms
             try:
-                logging.info(f"Creating the deletion table for the {table.__str__()} table in the {database_record.__str__()} database")
-
                 query = insert_update_delete_trigger_query(table, f"{table.schema.name}_{table.name}_insert_update_delete_trigger", f"{table.schema.name}_{table.name}_tracking_id_sequence", primary_key_columns, **dbms_booleans)
+                breakpoint()
 
                 logging.info(f"Creating the insert, update and delete trigger for the {table.__str__()} table in the {database_record.__str__()} database")
                 logging.info(f"Running query: {query}")
@@ -1520,56 +1522,137 @@ def populate_tracking_id_column(database_record):
 
     dbms_booleans = get_dbms_booleans(database_record)
 
-    try:
-        connection = get_database_connection(database_record)
+    connection = get_database_connection(database_record)
+
+    if connection:
         cursor = connection.cursor()
 
-        server_id = SERVER_ID
-
-        for table in ferdolt_models.Table.objects.filter( Q(schema__database=database_record) & ~Q(name__icontains='_deletion') ):
-            tracking_id_exists = False
+        for table in ferdolt_models.Table.objects.filter( schema__database=database_record ):
             primary_key_columns = table.column_set.filter(columnconstraint__is_primary_key=True).distinct()
+            sequence_name = f"{table.schema.name.lower()}_{table.name.lower()}_tracking_id_sequence"
 
-            # create and record the deletion table in the local dbms
             try:
-                logging.info(f"Creating the deletion table for the {table.__str__()} table in the {database_record.__str__()} database")
+                if dbms_booleans['is_postgres_db']:
+                    print(f"Populating the tracking_id column of the {table.get_queryname()} table in a postgres db")
+                    batch_size = 98
+                    results = cursor.execute(f"SELECT COUNT(*) FROM {table.get_queryname()}").fetchone()
+                    number_of_rows = results[0]
 
-                query = insert_update_delete_trigger_query(table, f"{table.schema.name}_{table.name}_insert_update_delete_trigger", f"{table.schema.name}_{table.name}_tracking_id_sequence", primary_key_columns, **dbms_booleans)
+                    number_of_iterations, remainder = divmod( number_of_rows, batch_size )
 
-                logging.info(f"Creating the insert, update and delete trigger for the {table.__str__()} table in the {database_record.__str__()} database")
-                logging.info(f"Running query: {query}")
+                    number_of_iterations += 0 if remainder == 0 else 1
 
-                try:
-                    cursor.execute( query )
-                    logging.info(f"Successfully created the insert, update, delete trigger. Recording the deletion table in the local db")
-                    print(f"Successfully created/altered the insert, update, delete trigger. Recording the deletion table in the local db")
+                    procedure_name = f"set_{table.schema.name}_{table.name}_tracking_id_where_null"
+                    
+                    procedure_query = get_set_tracking_id_where_null_query(
+                        table.name, table.schema.name, 
+                        primary_key_columns, sequence_name=sequence_name, 
+                        server_id=SERVER_ID, **dbms_booleans
+                    )
+                    try:
+                        cursor.execute(procedure_query)
 
-                    connection.commit()
-                
-                except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
-                    logging.error(f"Error creating the insert, update delete trigger for {table.get_queryname()} table in the {database_record.name.lower()}. Error: {str(e)}")
-                    logging.error(f"Query to create the trigger: {query}")
-                    connection.rollback()
-                    success_flag = False
-                    raise e
-                
-                except ( pyodbc.SyntaxError, psycopg.SyntaxError ) as e:
-                    logging.error(f"Error creating the insert, update, delete trigger. Error: {str(e)}")
-                    logging.error(f"Query to create the trigger: {query}")
-                    connection.rollback()
-                    success_flag = False
+                        for i in range(number_of_iterations):
+                            print(f"Batch {i+1} of {number_of_iterations}")
+                            # populating in batches of batch_size in order to avoid unique key constraints
+                            try:
+                                date_time_string = dt.datetime.now().strftime('%Y%m%d%H%M%S')
+                                call_procedure_query = f"call {procedure_name}({batch_size}, '{date_time_string}')"
+                                cursor.execute(call_procedure_query)
+                                time.sleep(2)
+                            except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
+                                logging.error(f"Error calling the {procedure_name} procedure")
+                                logging.error(f"{call_procedure_query}")
+                                connection.rollback()
+                                successful_flag = False
+                                raise e
+
+                    except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
+                        logging.error(f"Error altering/creating the {procedure_name} procedure for the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
+                        logging.error(f"Query to alter/create the procedure: {procedure_name}")
+                        success_flag = False
+                        connection.rollback()
+                        raise e
+
+                elif dbms_booleans['is_sqlserver_db']:
+                    query = None
+                    if primary_key_columns.count() == 1:
+                        query = set_tracking_id_where_null_query(
+                            table.name, table.schema.name, 
+                            primary_key_column=primary_key_columns.first(), sequence_name=sequence_name, 
+                            server_id=SERVER_ID, **dbms_booleans
+                        )
+                    else:
+                        query = set_tracking_id_where_null_query_multiple_primary_keys(
+                            table, primary_key_columns, server_id, 
+                            sequence_name=sequence_name, **dbms_booleans
+                        )
+
+                    if query:
+                        cursor.execute(query)
 
             except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
-                logging.error(f"Error creating deletion table for {table.get_queryname()} table in the {database_record.name.lower()}. Error: {str(e)}")
-                print(f"Error creating deletion table for {table.get_queryname()} table in the {database_record.name.lower()}")
-                connection.rollback()
+                logging.error(f"Error adding tracking_id column to the {table.get_queryname()} table in the {database_record.name.lower()} database. Error: {str(e)}")
+                logging.error(f"Query to add the tracking_id column: {query}")
                 success_flag = False
+                connection.rollback()
                 raise e
 
-    except InvalidDatabaseConnectionParameters as e:
-        raise e
+        connection.commit()
+        connection.close()
 
-def add_foreign_tracking_id_columns( database_record ):
+    # try:
+    #     connection = get_database_connection(database_record)
+    #     cursor = connection.cursor()
+
+    #     server_id = SERVER_ID
+
+    #     for table in ferdolt_models.Table.objects.filter( Q(schema__database=database_record) & ~Q(name__icontains='_deletion') ):
+    #         tracking_id_exists = False
+    #         primary_key_columns = table.column_set.filter(columnconstraint__is_primary_key=True).distinct()
+
+    #         # create and record the deletion table in the local dbms
+    #         try:
+    #             logging.info(f"Creating the deletion table for the {table.__str__()} table in the {database_record.__str__()} database")
+
+    #             query = insert_update_delete_trigger_query(table, f"{table.schema.name}_{table.name}_insert_update_delete_trigger", f"{table.schema.name}_{table.name}_tracking_id_sequence", primary_key_columns, **dbms_booleans)
+
+    #             logging.info(f"Creating the insert, update and delete trigger for the {table.__str__()} table in the {database_record.__str__()} database")
+    #             logging.info(f"Running query: {query}")
+
+    #             try:
+    #                 cursor.execute( query )
+    #                 logging.info(f"Successfully created the insert, update, delete trigger. Recording the deletion table in the local db")
+    #                 print(f"Successfully created/altered the insert, update, delete trigger. Recording the deletion table in the local db")
+
+    #                 connection.commit()
+                
+    #             except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
+    #                 logging.error(f"Error creating the insert, update delete trigger for {table.get_queryname()} table in the {database_record.name.lower()}. Error: {str(e)}")
+    #                 logging.error(f"Query to create the trigger: {query}")
+    #                 connection.rollback()
+    #                 success_flag = False
+    #                 raise e
+                
+    #             except ( pyodbc.SyntaxError, psycopg.SyntaxError ) as e:
+    #                 logging.error(f"Error creating the insert, update, delete trigger. Error: {str(e)}")
+    #                 logging.error(f"Query to create the trigger: {query}")
+    #                 connection.rollback()
+    #                 success_flag = False
+
+    #         except ( pyodbc.ProgrammingError, psycopg.ProgrammingError ) as e:
+    #             logging.error(f"Error creating deletion table for {table.get_queryname()} table in the {database_record.name.lower()}. Error: {str(e)}")
+    #             print(f"Error creating deletion table for {table.get_queryname()} table in the {database_record.name.lower()}")
+    #             connection.rollback()
+    #             success_flag = False
+    #             raise e
+
+    #     connection.commit()
+        
+    # except InvalidDatabaseConnectionParameters as e:
+    #     raise e
+
+def add_and_populate_foreign_tracking_id_columns( database_record ):
     logging.debug( f"Adding the foreign tracking_id columns to the tables in the {database_record.__str__()} database" )
 
     dbms_booleans = get_dbms_booleans(database_record)
@@ -1605,10 +1688,12 @@ def add_foreign_tracking_id_columns( database_record ):
                     try:
                         # populate the newly created column
                         query = f"""
-                            UPDATE {table.get_queryname()} SET {column_name}=subquery.{tracking_id_column} 
+                            UPDATE {table.get_queryname()} target SET {column_name}=subquery.{tracking_id_column} 
                             FROM ( SELECT {referenced_table_id}, {tracking_id_column} FROM { referenced_table.get_queryname() } ) subquery 
-                            WHERE subquery.{referenced_table_id}={table.get_queryname()}.{constraint.column.name}
+                            WHERE subquery.{referenced_table_id}=target.{constraint.column.name}
                         """
+                        cursor.execute(query)
+                        connection.commit()
                     except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
                         logging.error(f"Error populating the newly created {column_name} column. Query to populate the {column_name} column")
                         connection.rollback()
