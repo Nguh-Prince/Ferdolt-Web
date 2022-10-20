@@ -589,7 +589,7 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                                 group_column=group_column, column=column_query.first()
                             )
                         else:
-                            # create column
+                            # create column 
                             pass
             
             return Response( serializers.GroupDetailSerializer(group).data, status=status.HTTP_201_CREATED)

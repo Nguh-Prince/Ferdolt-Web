@@ -51,3 +51,6 @@ def send_email_to_admins(subject, message):
     email_from = settings.EMAIL_HOST_USER
 
     send_mail(subject, message, email_from, recipient_list)
+
+def encrypt(message, key):
+    pass
