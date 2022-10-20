@@ -67,7 +67,7 @@ def login_view(request):
             user = User.objects.get(username=username)
         except Exception:
             context = {
-                "errrors": [
+                "errors": [
                     {
                         "message": _("Username or password incorrect"),
                         "time": timezone.now(),

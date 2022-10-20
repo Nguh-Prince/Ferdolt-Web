@@ -41,7 +41,7 @@
 
 <div class="row py-2" id="groups">
     {% for group in groups %}
-    <div class="card mx-1 w-30" style="width: 18rem;" id="group-{{ group.id }}">
+    <div class="card mx-1 w-30 selectable" style="width: 18rem;" id="group-{{ group.id }}">
         <div class="card-body">
             <div class="px-2 py-1" style="position: absolute; top: 0; left: 0;">
                 <input type="checkbox" class="form-check-input select-database" data-group-id="{{ group.id }}">
@@ -424,6 +424,8 @@
         tables: []
     }
 
+    var SELECTED_GROUPS = []
+
     $(document).ready(() => {
         getGroups()
     })
@@ -450,6 +452,22 @@
             }
         })
     }
+
+    function displayActionButtons() {
+
+    }
+
+    // function addGroupToList(groupObject) {
+
+    // } 
+
+    // function displayGroups(groupObjects) {
+    //     $("#groups").html('')
+
+    //     for (let object of groupObjects) {
+    //         a
+    //     }
+    // }
 
     $(".accordion-button").click(function() {
         console.log("Clicked accordion-button")

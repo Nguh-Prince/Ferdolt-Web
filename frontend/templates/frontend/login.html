@@ -3,8 +3,6 @@
 <!DOCTYPE html>
 <html lang="en">
 
-    
-<!-- Mirrored from mannatthemes.com/dastone/default/auth-login.html by HTTrack Website Copier/3.x [XR&CO'2014], Tue, 09 Aug 2022 15:13:08 GMT -->
 <head>
         <meta charset="utf-8" />
         <title>DoDB | Login</title>
@@ -14,7 +12,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="{% static 'frontend/assets/images/favicon.ico' %}">
 
         <!-- App css -->
         <link href="{% static 'frontend/assets/css/bootstrap.min.css' %}" rel="stylesheet" type="text/css" />
@@ -67,6 +65,9 @@
             
             #messages.active {
                 z-index: 1300;
+                position: absolute;
+                top: 0;
+                width: 100%;
             }
     
             .small-icon {
@@ -87,7 +88,11 @@
     </head>
 
     <body class="account-body accountbg">
-
+        <div id="messages" {% if errors %}class="active my-2 px-3"{% endif %}>
+            {% for message in errors %}
+            <div class="alert alert-danger alert-dismissible">{{ message.message }}</div>
+            {% endfor %}
+        </div>
         <!-- Log In page -->
         <div class="container">
             <div class="row vh-100 d-flex justify-content-center">
