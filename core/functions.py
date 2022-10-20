@@ -719,7 +719,7 @@ def create_sequence_query(sequence_name, is_postgres_db=False, is_sqlserver_db=F
 
     if is_mysql_db:
         return f"""
-        CREATE OR REPLACE SEQUENCE SEQUENCE {sequence_name}  INCREMENT BY {increment} MINVALUE {minvalue} { 'CYPCLE' if cycle else '' } MAXVALUE {maxvalue}
+        CREATE OR REPLACE SEQUENCE {sequence_name}  INCREMENT BY {increment} MINVALUE {minvalue} { 'CYCLE' if cycle else '' } MAXVALUE {maxvalue}
         """
 
 
@@ -739,6 +739,11 @@ def create_datetime_column_with_default_now_query(table, is_postgres_db=False, i
         return f"""
         ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS last_updated timestamp DEFAULT NOW() { "AT TIME ZONE 'UTC'" if use_timezone else '' }
         """
+    
+    elif is_mysql_db:
+        return f"""
+        ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS last_updated timestamp DEFAULT CURRENT_TIMESTAMP 
+        """
 
 def get_create_tracking_id_column_query(table, is_postgres_db=False, is_mysql_db=False, is_sqlserver_db=False, column_name='tracking_id', length=len(SERVER_ID) + 16):
     """
@@ -752,6 +757,10 @@ def get_create_tracking_id_column_query(table, is_postgres_db=False, is_mysql_db
             END
         """
     elif is_postgres_db:
+        return f"""
+        ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS {column_name} VARCHAR({length}) UNIQUE
+        """
+    if is_mysql_db:
         return f"""
         ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS {column_name} VARCHAR({length}) UNIQUE
         """
@@ -830,6 +839,62 @@ def get_set_tracking_id_where_null_query(
             END;
             $$
         """
+    elif is_mysql_db:
+        return f"""
+        CREATE OR REPLACE PROCEDURE {procedure_name}(batch_size int, datetime_string varchar(24))
+        BEGIN
+            DECLARE bDone INT;
+
+            IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table_name}' AND TABLE_SCHEMA='{schema_name}' AND COLUMN_NAME='{column_name}') THEN 
+            DECLARE curs CURSOR FOR SELECT {', '.join( [column.name for column in primary_key_columns] )} FROM {schema_name}.{table_name} WHERE tracking_id IS NULL LIMIT batch_size;
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET bDone = 1;
+
+            OPEN curs;
+
+            REPEAT 
+                UPDATE {schema_name}.{table_name} SET {column_name} = CONCAT(
+                    '{server_id}', datetime_string, CAST ( ( SELECT NEXT VALUE FOR {sequence_name} ) AS VARCHAR ) 
+                    WHERE { ' AND '.join( [ f"{column.name}=curs.{column.name}" for column in primary_key_columns ] ) }
+                );
+            UNTIL bDone END REPEAT;
+
+            CLOSE curs;
+        END
+        """
+
+# CREATE PROCEDURE GetFilteredData()
+# BEGIN
+#   DECLARE bDone INT;
+
+#   DECLARE var1 CHAR(16);    -- or approriate type
+#   DECLARE var2 INT;
+#   DECLARE var3 VARCHAR(50);
+  
+#   DECLARE curs CURSOR FOR  SELECT something FROM somewhere WHERE some stuff;
+#   DECLARE CONTINUE HANDLER FOR NOT FOUND SET bDone = 1;
+
+#   DROP TEMPORARY TABLE IF EXISTS tblResults;
+#   CREATE TEMPORARY TABLE IF NOT EXISTS tblResults  (
+#     --Fld1 type,
+#     --Fld2 type,
+#     --...
+#   );
+
+#   OPEN curs;
+
+#   SET bDone = 0;
+#   REPEAT
+#     FETCH curs INTO var1, var2, var3;
+
+#     IF whatever_filtering_desired
+#        -- here for whatever_transformation_may_be_desired
+#        INSERT INTO tblResults VALUES (var1, var2, var3);
+#     END IF;
+#   UNTIL bDone END REPEAT;
+
+#   CLOSE curs;
+#   SELECT * FROM tblResults;
+# END
 
 def get_column_type_and_precision(column) -> str:
     string = f"{column.name} "
@@ -899,6 +964,8 @@ def update_datetime_columns_to_now_query(table, column_name='last_updated', is_p
         return f"UPDATE {table.get_queryname()} SET {column_name}=CURRENT_TIMESTAMP"
     elif is_postgres_db:
         return f"""UPDATE {table.get_queryname()} SET {column_name}=NOW() { "AT TIME ZONE 'UTC'" if use_timezone else '' }"""
+    elif is_mysql_db:
+        return f"""UPDATE {table.get_queryname()} SET {column_name}=CURRENT_TIMESTAMP"""
     else:
         raise NotSupported("We do not support the database you passed yet")
 
@@ -925,7 +992,9 @@ def create_column_if_not_exists(table, column_name, is_postgres_db=False, is_mys
         """
 
     if is_mysql_db:
-        return ""
+        return f"""
+            ALTER TABLE {table.get_queryname()} ADD COLUMN IF NOT EXISTS {column_name} {data_type} 
+        """
 
 def insert_update_delete_trigger_query( 
     table, trigger_name, sequence_name, 
@@ -1064,6 +1133,9 @@ def insert_update_delete_trigger_query(
         END;
         $$
         """
+    elif is_mysql_db:
+        pass
+        # def 
     
     else:
         raise NotSupported
