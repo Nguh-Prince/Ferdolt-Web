@@ -25,7 +25,7 @@ def is_valid_ip_address(ip):
         raise e
 
 def generate_random_string(length=8):
-    random_string = random.choices( string.ascii_letters + string.digits + string.punctuation, k=length )
+    random_string = ''.join(random.choices( string.ascii_letters + string.digits + string.punctuation, k=length ))
 
     return random_string
 

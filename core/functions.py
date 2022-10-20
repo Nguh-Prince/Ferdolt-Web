@@ -1482,7 +1482,6 @@ def replace_triggers( database_record ):
             # create and record the deletion table in the local dbms
             try:
                 query = insert_update_delete_trigger_query(table, f"{table.schema.name}_{table.name}_insert_update_delete_trigger", f"{table.schema.name}_{table.name}_tracking_id_sequence", primary_key_columns, **dbms_booleans)
-                breakpoint()
 
                 logging.info(f"Creating the insert, update and delete trigger for the {table.__str__()} table in the {database_record.__str__()} database")
                 logging.info(f"Running query: {query}")

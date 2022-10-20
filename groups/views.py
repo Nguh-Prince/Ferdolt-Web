@@ -2,12 +2,15 @@ import json
 from hashlib import sha256
 import logging
 import os
+from pathlib import Path
 import re
+import zipfile
 
 from cryptography.fernet import Fernet
 
 from django.core.files import File as DjangoFile
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
@@ -40,7 +43,7 @@ deletion_table_regex = re.compile("_deletion$")
 
 class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     serializer_class = serializers.GroupSerializer
-    permission_classes = [ IsStaff, ]
+    # permission_classes = [ IsStaff, ]
 
     serializer_classes = {
         'create': serializers.GroupCreationSerializer,
@@ -49,7 +52,8 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         'list': serializers.GroupDisplaySerializer,
         'retrieve': serializers.GroupDetailSerializer,
         'synchronization_group': serializers.SynchronizationGroupSerializer,
-        'add_database': serializers.AddDatabaseToGroupSerializer
+        'add_database': serializers.AddDatabaseToGroupSerializer,
+        'server_pending_synchronizations': serializers.ServerPendingSynchronizationsSerializer
     }
 
     def get_queryset(self):
@@ -185,32 +189,32 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                             file_name = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, 
                             "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}.json")
 
-                            group_extraction = None
+                    group_extraction = None
 
-                            with open( file_name, "a+" ) as __:
-                                json_string = json.dumps( results, default=custom_converter )
-                                token = f.encrypt( bytes( json_string, 'utf-8' ) )
+                    with open( file_name, "a+" ) as __:
+                        json_string = json.dumps( results, default=custom_converter )
+                        token = f.encrypt( bytes( json_string, 'utf-8' ) )
 
-                                __.write( token.decode('utf-8') )
-                                
-                                file = File.objects.create( file=DjangoFile( __, name=os.path.basename(file_name) ), size=os.path.getsize(file_name), is_deleted=False, hash=sha256( token ).hexdigest() 
+                        __.write( token.decode('utf-8') )
+                        
+                        file = File.objects.create( file=DjangoFile( __, name=os.path.basename(file_name) ), size=os.path.getsize(file_name), is_deleted=False, hash=sha256( token ).hexdigest() 
+                        )
+
+                        extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
+
+                        group_extraction = models.GroupExtraction.objects.create(group=group, extraction=extraction, source_database=source)
+
+                        for database in target_databases:
+                            connection = get_database_connection(database)
+
+                            if connection:
+                                models.GroupDatabaseSynchronization.objects.create(extraction=group_extraction, 
+                                    group_database=database, is_applied=False
                                 )
 
-                                extraction = models.Extraction.objects.create(file=file, start_time=start_time, time_made=time_made)
-
-                                group_extraction = models.GroupExtraction.objects.create(group=group, extraction=extraction, source_database=source)
-
-                                for database in target_databases:
-                                    connection = get_database_connection(database)
-
-                                    if connection:
-                                        models.GroupDatabaseSynchronization.objects.create(extraction=group_extraction, 
-                                            group_database=database, is_applied=False
-                                        )
-
-                            os.unlink( file_name )
-                            
-                            serializer = serializers.GroupExtractionSerializer(group_extraction)
+                    os.unlink( file_name )
+                    
+                    serializer = serializers.GroupExtractionSerializer(group_extraction)
 
                 else:
                     return Response( data={'message': _('Error connecting to the %(database)s database. Please ensure that the database server is running and your connection credentials are correct'
@@ -616,11 +620,76 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
             data=serializers.GroupDatabaseSerializer(group_database).data
         )
 
-    # @action(
-    #     methods=["POST"],
-    #     detail=True
-    # )
-    # def 
+    @action(
+        methods=["GET"],
+        detail=True
+    )
+    def server_pending_synchronizations(self, request, *args, **kwargs):
+        group: models.Group = self.get_object()
+        
+        f = Fernet(group.get_fernet_key())
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        validated_data = serializer.validated_data
+
+        # group_server = validated_data['group_server']
+
+        # extractions = models.GroupExtraction.objects.filter(
+        #     id__in=models.GroupServerSynchronization.objects.filter(group_server=group_server, is_applied=False)
+        # )
+        extractions = models.GroupExtraction.objects.all()
+        
+        serialized_extractions = serializers.SimpleGroupExtractionSerializer(extractions, many=True)
+
+        zip_file_name = os.path.join( 
+            settings.BASE_DIR, settings.MEDIA_ROOT, "downloads", "groupservers"
+        )
+        
+        temp_json_file = os.path.join(
+            settings.BASE_DIR, settings.MEDIA_ROOT, "temp"
+        )
+        
+        Path(zip_file_name).mkdir(parents=True, exist_ok=True)
+        Path(temp_json_file).mkdir(parents=True, exist_ok=True)
+
+        formatted_time = timezone.now().strftime('%Y%m%d%H%M%S')
+
+        zip_file_name = os.path.join(
+            zip_file_name, f"{formatted_time}.zip"
+        )
+        temp_json_file = os.path.join(
+            temp_json_file, f"{formatted_time}.json"
+        )
+
+        # writing the details of the extractions into a file
+        with open(temp_json_file, "w") as __:
+            json_string = json.dumps(serialized_extractions.data)
+            token = f.encrypt( bytes(json_string, 'utf-8') )
+
+            __.write( token.decode('utf-8') )
+
+        # adding the file with the extraction details to the archive
+        with zipfile.ZipFile( zip_file_name, mode='a' ) as archive:
+            archive.write(temp_json_file, os.path.basename(temp_json_file))
+
+        for extraction in extractions:
+            extraction_file_path = extraction.extraction.file_path
+
+            if not os.path.exists(extraction_file_path):
+                extraction.file.is_deleted = True
+                extraction.file.save()
+            else:
+                with zipfile.ZipFile( zip_file_name, mode='a' ) as archive:
+                    archive.write(extraction_file_path, os.path.basename(extraction_file_path))
+
+        fh = open(zip_file_name, 'rb')
+        
+        response = HttpResponse( DjangoFile(fh), content_type='application/zip' )
+        response['Content-Disposition'] = 'attachment; filename="%s"' % 'CDX_COMPOSITES_20140626.zip'
+        return response
+
 
 class GroupExtractionViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     serializer_class = serializers.GroupExtractionSerializer

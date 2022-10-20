@@ -48,6 +48,10 @@ class Extraction(models.Model):
     # i.e. SELECT * FROM table WHERE last_updated < end_time
     end_time = models.DateTimeField(null=True)
 
+    @property
+    def file_path(self) -> str:
+        return self.file.file.path
+
 class ExtractionTargetDatabase(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE)
@@ -93,3 +97,7 @@ class Message(models.Model):
     recipient = models.ForeignKey(ferdolt_models.Server, on_delete=models.CASCADE)
     file = models.ForeignKey(File, on_delete=models.CASCADE)
     history = HistoricalRecords()
+
+# GroupExtraction.objects.filter( 
+#     ~Q(extraction__file__id__in=Message.objects.values("file__id"))
+# )

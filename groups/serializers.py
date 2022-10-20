@@ -1,3 +1,4 @@
+import os
 from typing import Iterable
 
 from django.utils.translation import gettext as _
@@ -137,10 +138,28 @@ class ExtractFromGroupSerializer(serializers.ModelSerializer):
 
         return super().validate(attrs)
 
-class GroupExtractionSerializer(serializers.ModelSerializer):
+class SimpleGroupExtractionSerializer(serializers.ModelSerializer):
+    file_name = serializers.SerializerMethodField()
+    extraction_time = serializers.DateTimeField(source="extraction.time_made")
+
     class Meta:
         model = models.GroupExtraction
-        fields = ( "id", "extraction", "group" ) 
+        fields = ( "id", "extraction", "group", "file_name", "extraction_time" ) 
+
+    def get_file_name(self, obj):
+        file_path = obj.extraction.file_path
+
+        return os.path.basename(file_path)
+
+class GroupExtractionSerializer(SimpleGroupExtractionSerializer):
+    file_path = serializers.CharField(source='extraction.file_path')
+    # file_name = serializers.SerializerMethodField()
+    # extraction_time = serializers.DateTimeField(source="extraction.time_made")
+
+    class Meta:
+        model = models.GroupExtraction
+        fields = ( "id", "extraction", "group", "file_name", "file_path", "extraction_time" ) 
+
 
 class GroupDatabaseSynchronizationSerializer(serializers.ModelSerializer):
     group_database = GroupDatabaseSerializer()
@@ -254,7 +273,7 @@ class AddDatabaseToGroupSerializer(serializers.Serializer):
     extraction_frequency = serializers.IntegerField(required=False)
     synchronization_frequency = serializers.IntegerField(required=False)
 
-    def validate_database_id(self, data):
+    def validate_database(self, data):
         if not data is None:
             # check if a database exists with that id in the database
             query = Database.objects.filter(id=data)
@@ -290,4 +309,16 @@ class AddDatabaseToGroupSerializer(serializers.Serializer):
             attrs['synchronization_frequency'] = 2
 
         return attrs
-    
+
+class ServerPendingSynchronizationsSerializer(serializers.Serializer):
+    group_server = serializers.IntegerField(required=False)
+
+    def validate_group_server(self, data):
+        query = models.GroupServer.objects.filter(id=data)
+
+        if not query.exists():
+            raise serializers.ValidationError(
+                _("No group server exists with the identifier %(id)d" % {'id': data})
+            )
+
+        return query.first()

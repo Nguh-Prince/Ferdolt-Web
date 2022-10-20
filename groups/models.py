@@ -5,6 +5,8 @@ import string
 
 from cryptography import fernet
 
+from common.functions import generate_random_string
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -50,6 +52,9 @@ def generate_unique_group_name(length=15):
         if not Group.objects.filter(name=name).exists():
             return ''.join(name)
 
+def generate_random_encryption_code(length=10):
+    return generate_random_string(length)
+
 class Group(models.Model):
     name = models.CharField(unique=True, max_length=50, default=generate_unique_group_name)
     slug = models.CharField(max_length=50, null=False)
@@ -58,7 +63,8 @@ class Group(models.Model):
     # e.g. a group member is lacking a column or table
     create_missing_objects_from_sources = models.BooleanField(default=False) 
     is_active = models.BooleanField(default=True)
-
+    created_by = models.ForeignKey(ferdolt_models.Server, on_delete=models.CASCADE, null=True)
+    
     @property
     def databases(self):
         return ferdolt_models.Database.objects.filter(id__in=self.groupdatabase_set.values("database__id"))
@@ -77,6 +83,27 @@ DEFAULT_SYNCHRONIZATION_FREQUENCY = 1
 class GroupServer(models.Model):
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
     server = models.ForeignKey(ferdolt_models.Server, on_delete=models.CASCADE, null=True)
+    can_write = models.BooleanField(default=True)
+    can_read = models.BooleanField(default=True)
+
+    def clean(self) -> None:
+        if not self.can_read and not self.can_write:
+            raise ValidationError(
+                _("The group server must either be able to write to or read from the database")
+            )
+        return super().clean()
+
+    def save(self, *args, **kwargs) -> None:
+        if 'force_insert' in kwargs:
+            super().save(*args, **kwargs)
+
+            for extraction in self.group.groupextraction_set.filter(
+                ~Q(groupserversynchronization__group_server=self)
+            ):
+                GroupServerSynchronization.objects.create(
+                    group_server=self, extraction=extraction, 
+                    is_applied=False, time_applied=None
+                )
 
 class GroupDatabase(models.Model):
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE, null=True)
@@ -89,7 +116,7 @@ class GroupDatabase(models.Model):
     def clean(self) -> None:
         if not self.can_write and not self.can_read:
             raise ValidationError(
-             _("The group must be writeable or readable") 
+             _("The group database must be writeable or readable") 
             )
         return super().clean()
 
@@ -103,8 +130,10 @@ class GroupDatabase(models.Model):
         if 'force_insert' in kwargs:
             super().save(*args, **kwargs)
             # create GroupDatabaseSynchronizations for every GroupExtraction of this group
-            for extraction in self.groupextraction_set.filter(~Q(groupdatabasesynchronization__group_database=self)):
+            for extraction in self.group.groupextraction_set.filter(~Q(groupdatabasesynchronization__group_database=self)):
                 GroupDatabaseSynchronization.objects.create(group_database=self, extraction=extraction)
+        else:
+            super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("Group database")
@@ -179,11 +208,16 @@ class GroupColumnConstraint(models.Model):
     references = models.ForeignKey(GroupColumn, on_delete=models.SET_NULL, 
     null=True, blank=True, related_name='references')
 
+EXTRACTION_CODE_MAX_LENGTH = 10
 class GroupExtraction(models.Model):
     extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
     source_database = models.ForeignKey(GroupDatabase, on_delete=models.SET_NULL, null=True)
     source_server = models.ForeignKey(GroupServer, on_delete=models.SET_NULL, null=True)
+    code = models.CharField(
+        max_length=EXTRACTION_CODE_MAX_LENGTH, 
+        default=generate_random_encryption_code
+    )
 
 class GroupDatabaseSynchronization(models.Model):
     group_database = models.ForeignKey(GroupDatabase, on_delete=models.CASCADE)
