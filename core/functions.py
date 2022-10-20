@@ -7,6 +7,9 @@ from cryptography.fernet import Fernet
 from django.db.models import F, Q
 from django.db.utils import IntegrityError
 
+import mysql.connector
+from mysql.connector import Error
+
 import psycopg
 
 from core.data_types import data_types
@@ -25,6 +28,8 @@ import json
 
 sql_server_regex = re.compile("sqlserver", re.I)
 postgresql_regex = re.compile("postgres", re.I)
+mysql_regex = re.compile("mysql", re.I)
+
 deletion_table_regex = re.compile("_deletion$")
 
 def encrypt(object, encoding='utf-8'):
@@ -126,6 +131,25 @@ def get_database_connection(database: ferdolt_models.Database) -> pyodbc.Cursor:
             print(f"Error connecting to the Postgres database {database.name} on {database.host}:{database.port}. Connection string: '{connection_string}'. Error: {str(e)}")
             return None
 
+    if mysql_regex.search(dbms_name):
+        try:
+            connection = mysql.connector.connect(
+                host=f'{database.get_host}',
+                database=f'{database.name.lower()}',
+                user=f'{database.get_username}',
+                password=f'{database.get_password}'
+            )
+
+            if not connection.is_connected():
+                logging.error(f"Error connecting to the MySQL database {database.__str__()}")
+                return None
+
+            return connection
+        except Error as e:
+            print(f"Error while connecting to the MySQL database {database.__str__()}. Error: {str(e)}")
+            logging.error(f"Error while connecting to the MySQL database {database.__str__()}. Error: {str(e)}")
+            return None
+
 def get_create_temporary_table_query(database, temporary_table_name, columns_and_datatypes_string):
     """
     Get the query to create a temporary table based on the database
@@ -135,7 +159,7 @@ def get_create_temporary_table_query(database, temporary_table_name, columns_and
     if sql_server_regex.search(dbms_name):
         return f"CREATE TABLE #{temporary_table_name} {columns_and_datatypes_string}"
 
-    if postgresql_regex.search(dbms_name):
+    if postgresql_regex.search(dbms_name) or mysql_regex.search(dbms_name):
         return f"CREATE TEMP TABLE {temporary_table_name} {columns_and_datatypes_string}"
 
 def get_temporary_table_name(database, temporary_table_name: str):
@@ -148,7 +172,7 @@ def get_temporary_table_name(database, temporary_table_name: str):
     if sql_server_regex.search(dbms_name):
         return f"#{temporary_table_name}"
 
-    if postgresql_regex.search(dbms_name):
+    if postgresql_regex.search(dbms_name) or mysql_regex.search(dbms_name):
         return f"{temporary_table_name}"
 
 def get_query_placeholder(is_postgres_db, is_sqlserver_db, is_mysql_db):
@@ -156,7 +180,7 @@ def get_query_placeholder(is_postgres_db, is_sqlserver_db, is_mysql_db):
     
     if is_sqlserver_db:
         return "?"
-    if is_postgres_db:
+    if is_postgres_db or is_mysql_db:
         return "%s"
 
 def get_dbms_booleans(database) -> dict:
@@ -177,12 +201,14 @@ def get_dbms_booleans(database) -> dict:
         "is_mysql_db": is_mysql_db
     }
 
-def get_default_schema(is_postgres_db, is_sqlserver_db, is_mysql_db):
+def get_default_schema(is_postgres_db, is_sqlserver_db, is_mysql_db, database=None):
     if is_postgres_db:
         return "public"
     if is_sqlserver_db:
         return "dbo"
     if is_mysql_db:
+        if database:
+            return database.name
         return ""
 
 def extract_raw(database: ferdolt_models.Database, start_time: dt.datetime, end_time: None):
@@ -283,7 +309,14 @@ def get_table_foreign_key_references(table: ferdolt_models.Table, connection=Non
             WHERE tc.constraint_type='FOREIGN KEY' AND tc.table_name='{table.name}' 
                 AND tc.table_schema='{table.schema.name}'
             """
-
+        elif dbms_booleans['is_mysql_db']:
+            query = f"""
+            SELECT TABLE_SCHEMA schema_name, COLUMN_NAME referencing_column, 
+            REFERENCED_TABLE_NAME table_name, REFERENCED_COLUMN_NAME column_name
+            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+            WHERE REFERENCED_TABLE_SCHEMA='{table.schema.name}' AND TABLE_NAME='{table.name}'
+            """
+            pass
         if query:
             rows = cursor.execute(query)
             columns = [ column[0] for column in cursor.description ]
@@ -292,6 +325,7 @@ def get_table_foreign_key_references(table: ferdolt_models.Table, connection=Non
                 record = dict( zip( columns, row ) )
 
                 try:
+                    # getting the primary key column in the parent table
                     referenced_column = ferdolt_models.Column.objects.get( table__schema__database=database, table__name__iexact=record["table_name"], 
                     name__iexact=record["column_name"] )
 

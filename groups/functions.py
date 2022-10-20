@@ -19,7 +19,7 @@ from common.functions import hash_file
 from core.functions import (
     custom_converter, get_column_dictionary, get_create_temporary_table_query, 
     get_database_connection, get_dbms_booleans, get_temporary_table_name, 
-    get_type_and_precision, deletion_table_regex, get_query_placeholder
+    get_type_and_precision, deletion_table_regex, get_query_placeholder, initialize_database
 )
 
 from ferdolt import models as ferdolt_models
@@ -496,14 +496,41 @@ def create_non_existing_group_tables_in_group_database(group_database: models.Gr
     connection = get_database_connection(group_database.database)
 
     if connection:
+        cursor = connection.cursor()
+
         for group_table in group.tables.all():
+            logging.info(f"Creating the {group_table.name} table in the {group_database.database} database")
+            
             group_table_table_query = models.GroupTableTable.objects.filter( group_table=group_table, table__schema__database=group_database.database )
 
             if not group_table_table_query.exists():
                 # create the table in the database and register it locally
                 query_to_create_table = f"""
-                CREATE TABLE {group_table.name} (  )
+                CREATE TABLE {group_table.name} 
+                ( { ', '.join( [ get_data_type_specification_for_group_column( group_column ) for group_column in group_table.columns.all() ] ) } )
                 """
+
+                try:
+                    cursor.execute(query_to_create_table)
+                    # connection.commit()
+                    # schema = group_database.database.get_default_schema()
+
+                    # table = ferdolt_models.Table.objects.create(schema=schema, name=group_table.name)
+
+                    # for group_column in group_table.columns.all():
+                    #     column = ferdolt_models.Column.objects.create(
+                    #         table=table, name=group_column.name, data_type=group_column.data_type
+                    #     )
+
+                except (psycopg.ProgrammingError, pyodbc.ProgrammingError) as e:
+                    logging.error(f"Error creating the {group_table.name} table in the {group_database.database} database")
+                    successful_flag = False
+                    connection.rollback()
+                    raise e
+        
+        connection.commit()
+        
+        initialize_database(group_database.database)
 
 def test_group_extraction(group: models.Group, duration: int=5*60, interval=30):
     time_elapsed = 0
