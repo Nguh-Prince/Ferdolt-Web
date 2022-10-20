@@ -316,7 +316,6 @@ def get_table_foreign_key_references(table: ferdolt_models.Table, connection=Non
             FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
             WHERE REFERENCED_TABLE_SCHEMA='{table.schema.name}' AND TABLE_NAME='{table.name}'
             """
-            pass
         if query:
             rows = cursor.execute(query)
             columns = [ column[0] for column in cursor.description ]
@@ -385,6 +384,18 @@ def get_database_structure_dictionary(database, connection):
             CU.COLUMN_NAME = C.COLUMN_NAME AND CU.TABLE_NAME = C.TABLE_NAME AND CU.TABLE_SCHEMA = C.TABLE_SCHEMA LEFT JOIN 
             INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC ON TC.CONSTRAINT_NAME = CU.CONSTRAINT_NAME 
             WHERE T.TABLE_TYPE = 'BASE TABLE' AND NOT T.TABLE_SCHEMA = 'pg_catalog' AND NOT T.TABLE_SCHEMA = 'information_schema' 
+            ORDER BY T.TABLE_SCHEMA, T.TABLE_NAME
+        """
+    elif dbms_booleans['is_mysql_db']:
+        query = f"""
+            SELECT DISTINCT T.TABLE_NAME, T.TABLE_SCHEMA, C.COLUMN_NAME, C.DATA_TYPE, 
+            C.CHARACTER_MAXIMUM_LENGTH, C.DATETIME_PRECISION, C.NUMERIC_PRECISION, C.IS_NULLABLE, TC.CONSTRAINT_TYPE 
+            FROM INFORMATION_SCHEMA.TABLES T LEFT JOIN 
+            INFORMATION_SCHEMA.COLUMNS C ON C.TABLE_NAME = T.TABLE_NAME AND T.TABLE_SCHEMA = C.TABLE_SCHEMA 
+            LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE CU ON 
+            CU.COLUMN_NAME = C.COLUMN_NAME AND CU.TABLE_NAME = C.TABLE_NAME AND CU.TABLE_SCHEMA = C.TABLE_SCHEMA LEFT JOIN 
+            INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC ON TC.CONSTRAINT_NAME = CU.CONSTRAINT_NAME 
+            WHERE T.TABLE_TYPE = 'BASE TABLE' AND T.TABLE_SCHEMA = '{database.name}' 
             ORDER BY T.TABLE_SCHEMA, T.TABLE_NAME
         """
 
@@ -704,6 +715,11 @@ def create_sequence_query(sequence_name, is_postgres_db=False, is_sqlserver_db=F
         return f"""
         CREATE SEQUENCE IF NOT EXISTS {sequence_name} AS {data_type} 
         START WITH {start} INCREMENT BY {increment} MINVALUE {minvalue} {'CYCLE' if cycle else ''} MAXVALUE {maxvalue}
+        """
+
+    if is_mysql_db:
+        return f"""
+        CREATE OR REPLACE SEQUENCE SEQUENCE {sequence_name}  INCREMENT BY {increment} MINVALUE {minvalue} { 'CYPCLE' if cycle else '' } MAXVALUE {maxvalue}
         """
 
 
