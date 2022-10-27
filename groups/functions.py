@@ -483,6 +483,9 @@ def synchronize_group_database(group_database: models.GroupDatabase, use_primary
             except json.JSONDecodeError as e:
                 successful_flag = False
                 logging.error(f"[In groups.functions.synchronize_group_database]. Error parsing json from file for database synchronization. File path: {file_path}")
+            except (zipfile.BadZipFile) as e:
+                successful_flag = False
+                logging.error(f"[In groups.function.synchronize_group_database]. Error opening zip file")
 
 def get_data_type_specification_for_group_column(group_column: models.GroupColumn) -> str:
     if group_column.data_type in ["varchar", "char"]:

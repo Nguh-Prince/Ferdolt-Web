@@ -33,11 +33,13 @@ from ferdolt_web import settings
 
 from ferdolt_web.settings import FERNET_KEY
 from ferdolt import models as ferdolt_models
-from flux.models import Extraction, File
+from flux.models import Extraction, ExtractionTargetDatabase, File
 from flux.serializers import ExtractionSerializer
 from flux.views import get_column_dictionary, get_type_and_precision
 from frontend.views import synchronizations
 from . import models, serializers
+
+from common.functions import hash_file
 
 deletion_table_regex = re.compile("_deletion$")
 
@@ -696,6 +698,7 @@ class GroupExtractionViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     permission_classes = [ IsStaff, ]
 
     group_lookup_key = "parent_lookup_group"
+    group = None
 
     def get_queryset(self):
         if self.group_lookup_key in self.kwargs:
@@ -720,5 +723,28 @@ class GroupExtractionViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         with open(file_name) as __:
             for chunk in up_file.chunks:
                 __.write(chunk)
+            
+            file = File.objects.create( 
+                        file=DjangoFile( __, name=os.path.basename(file_name) ), 
+                        size=os.path.getsize(file_name), is_deleted=False, 
+                        hash=hash_file(file_name)
+                    )
+
+            extraction = Extraction.objects.create(
+                file=file, time_made=timezone.now()
+            )
+
+            group_extraction = models.GroupExtraction.objects.create(
+                group=self.group,
+                extraction=extraction
+            )
+
+            for database in self.group.groupdatabase_set.filter(can_read=True).all():
+                group_database_synchronization = models.GroupDatabaseSynchronization.objects.create(
+                    extraction=group_extraction, group_database=database, is_applied=False
+                )
+                ExtractionTargetDatabase.objects.create(
+                    extraction=extraction, database=database.database, is_applied=False
+                )
         
         return Response( {"message": _("File %(name)s uploaded successfully" % { 'name': up_file.name })} )

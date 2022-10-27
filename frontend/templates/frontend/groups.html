@@ -225,19 +225,91 @@
             <div class="modal-body">
                 <div class="mb-3">
                     <label for="">{% trans "Select database" %}</label>
-                    <select id="add-database-select-database" class="form-select" multiple>
+                    <select id="add-database-select-database" class="form-select">
+                        <option value="-5">{% trans "---" %}</option>
+
                         {% for database in databases %}
                             {% if database not in group.databases %}
                             <option value="{{ database.id }}">{{ database.name }}</option>
                             {% endif %}
                         {% endfor %}
-                        <option value="-1">{% trans "New database" %}</option>
+                        <!-- <option value="-1">{% trans "New database" %}</option> -->
                     </select>
                 </div>
             </div>
 
             <div class="modal-footer">
-                <button class="btn btn-primary" id="submit-add-database-to-group-form">{% trans "Submit" %}</button>
+                <button class="btn btn-primary" id="submit-add-database-to-group-form">{% trans "Done" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<input type="hidden" id="link-group-tables-to-database-tables-modal-trigger" 
+    data-bs-toggle="modal" data-bs-target="#link-group-tables-to-database-tables-modal"
+>
+
+<div class="modal" id="link-group-tables-to-database-tables-modal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "Link group tables to database" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <ul class="cd-accordion cd-accordion--animated margin-top-lg margin-bottom-lg">
+                    {% for table in group.tables.all %}
+                    <li class="cd-accordion__item cd-accordion__item--has-children">
+                        <input class="cd-accordion__input" type="checkbox" name="link-{{ table.name.lower }}-{{table.id}}" id="link-{{ table.name.lower }}-{{table.id}}">
+                        <label class="cd-accordion__label cd-accordion__label--icon-folder" for="link-{{ table.name.lower }}-{{table.id}}">
+                            <input type="checkbox" class="mx-2 select-table" data-table-id="{{ table.id }}"
+                                data-schema-id="{{ schema.id }}" name="select-link-{{ table.name.lower }}-{{table.id}}">
+                            <span>{{ table.name }}</span></label>
+    
+                        <ul class="cd-accordion__sub cd-accordion__sub--l2">
+                            <li>
+                                <div class="mb-3">
+                                    <label for="database-table-to-link-to" class="form-label">{% trans "Link to " %}</label>
+                                    <select name="{{ table.name.lower }}-{{ table.id }}-target-table" id="" class="form-select database-tables-to-link">
+                                        <option value="-1">{% trans "---" %}</option>
+                                    </select>
+                                </div>
+                            </li>
+                            <li class="cd-accordion__item">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>{% trans "Column name" %}</th>
+                                            <th>{% trans "Data type" %}</th>
+                                            <th>{% trans "Character max." %}</th>
+                                            <th>{% trans "Link to" %}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for column in table.columns.all %}
+                                        <tr>
+                                            <td>{{ column.name }}</td>
+                                            <td>{{ column.data_type }}</td>
+                                            <td>{{ column.character_maximum_length }}</td>
+                                            <td>
+                                                <select id="{{ column.name.lower }}-{{ column.id }}-target" class="form-select">
+                                                    <option value="-1">{% trans "---" %}</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </li>
+                        </ul>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="link-database-to-group">{% trans "Done" %}</button>
             </div>
         </div>
     </div>
@@ -457,18 +529,6 @@
     function displayActionButtons() {
 
     }
-
-    // function addGroupToList(groupObject) {
-
-    // } 
-
-    // function displayGroups(groupObjects) {
-    //     $("#groups").html('')
-
-    //     for (let object of groupObjects) {
-    //         a
-    //     }
-    // }
 
     $(".accordion-button").click(function() {
         console.log("Clicked accordion-button")
@@ -843,4 +903,68 @@
         })
     }
 </script>
+
+{% if group %}
+<script>
+    const ADD_DATABASE_SELECT_DATABASE_NON_SELECTED = -5
+    var SELECTED_DATABASE = null
+
+    $("#add-database-select-database").change( function(){
+        let value = this.value;
+        console.log(`The database select changed to: ${value}`)
+
+        if (value != ADD_DATABASE_SELECT_DATABASE_NON_SELECTED) {
+            let flag = false;
+
+            // check if the database already exists in the state array of databases
+            state.databases.map( (item) => {
+                if (item.id == value) {
+                    flag = true;
+                    SELECTED_DATABASE = item
+                }
+            } )
+
+            if (!flag) {
+                // getting the selected database's details from the API
+                $.ajax({
+                    type: "GET",
+                    url: `http://${location.host}${API_URL}/ferdolt/databases/${value}/`,
+                    success: function(data) {
+                        state.databases.push( data )
+                        SELECTED_DATABASE = data
+                    },
+                    error: function(data) {
+                        displayRequestErrors(data)
+                    }
+                })
+            }
+        } else {
+            SELECTED_DATABASE = null
+        }
+    } )
+
+    $("#submit-add-database-to-group-form").click( () => {
+        if (SELECTED_DATABASE) {
+            let databaseTables = getDatabaseTableObjects(SELECTED_DATABASE)
+
+            // populate the different table selects with options for each of this database's tables
+            let optionsArray = []
+
+            databaseTables.map( (item) => {
+                let option = createElement( 'option', [], { value: item.id } )
+                $(option).text( `${item.schema}.${item.name}` )
+                optionsArray.push(option)
+            } )
+
+            $(".database-tables-to-link").each( function() {
+                optionsArray.map( (option) => {
+                    $(this).append( option.cloneNode() )
+                } )
+            } )
+
+            $("#link-group-tables-to-database-tables-modal-trigger").click()
+        }
+    } )
+</script>
+{% endif %}
 {% endblock %}

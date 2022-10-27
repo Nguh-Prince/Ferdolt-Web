@@ -1106,7 +1106,7 @@ def insert_update_delete_trigger_query(
                             BEGIN
                                 UPDATE {table.get_queryname()} SET tracking_id = '{SERVER_ID}' || TO_CHAR( now(), 'YYYYMMDDHH24MISS' ) 
                                 || LPAD( CAST(nextval('{sequence_name}') AS VARCHAR), 2, '0' ), last_updated=CURRENT_TIMESTAMP  
-                                WHERE { " AND ".join( [ f"{column}=NEW.{column}" for column in primary_key_column_names ] ) };
+                                { " WHERE " if len(primary_key_column_names) else " " }{ " AND ".join( [ f"{column}=NEW.{column}" for column in primary_key_column_names ] ) };
                             END;
                         END IF;
                     END IF;
@@ -1250,7 +1250,7 @@ def refresh_table( connection, table ):
 
 def initialize_database( database_record ):
     logging.debug(f"Initializing database {database_record.__str__()}")
-    # print(f"Initializing database {database_record.__str__()}")
+    print(f"Initializing database {database_record.__str__()}")
     try:
         get_database_details(database_record)
         database_record.refresh_from_db()
@@ -1463,7 +1463,8 @@ def initialize_database( database_record ):
                         raise e
                 
                 else:
-                    raise InvalidDatabaseStructure(f"The {table.__str__()} table in the {database_record.__str__()} does not have a primary key column")
+                    pass
+                    # raise InvalidDatabaseStructure(f"The {table.__str__()} table in the {database_record.__str__()} does not have a primary key column")
 
             if 1:
                 logging.info(f"""Adding the last_updated column to the {table.get_queryname()} table in the {database_record.__str__()} database""")
@@ -1581,10 +1582,12 @@ def initialize_database( database_record ):
             database_record.is_initialized = True
             database_record.save()
 
-            add_and_populate_foreign_tracking_id_columns()
+            add_and_populate_foreign_tracking_id_columns(database_record)
 
     except InvalidDatabaseConnectionParameters as e:
-        raise e
+        print(f"Error connectiing to the database. Error {str(e)}")
+        pass
+        # raise e
 
 def replace_triggers( database_record ):
     logging.debug(f"Replacing triggers in the {database_record.__str__()} database")

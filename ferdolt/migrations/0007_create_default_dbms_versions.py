@@ -33,8 +33,9 @@ def create_default_dbms_versions(apps, schema_editor):
 
     for dbms_item in database_management_systems:
         query = DatabaseManagementSystem.objects.filter( Q(name=dbms_item['name']) | Q(codename=dbms_item["codename"]) )
+        
         if not query.exists():
-            dbms = DatabaseManagementSystem.objects.create(name=dbms_item["name"], codename=dbms_item["codename"])[0]
+            dbms = DatabaseManagementSystem.objects.create(name=dbms_item["name"], codename=dbms_item["codename"])
         else:
             dbms = query.first()
 

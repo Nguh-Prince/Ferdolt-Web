@@ -720,18 +720,19 @@ function loadPeople() {
     })
 }
 
-function loadConsultations() {
-    // get orders from API endpoint
-    $.ajax({
-        type: "GET",
-        url: `${API_URL}/centers/${getCookie("center_id")}/consultations/`,
-        success: function (data) {
-            state.consultations = data
-            consultationsTable.clear()
-            consultationsTable.rows.add(state.consultations)
-            consultationsTable.draw()
-        }
-    })
+function getDatabaseTableObjects(databaseObject) {
+    var tableObjects = []
+
+    databaseObject.schemas.map( (schema) => {
+        schema.tables.map( (table) => {
+            tableObjects.push( {
+                ...table, 
+                schema: schema
+            } )
+        } )
+    } )
+
+    return tableObjects
 }
 
 PRINT_SERVER_IP = "192.168.8.140"

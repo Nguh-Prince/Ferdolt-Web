@@ -145,7 +145,7 @@ class DatabaseDetailSerializer(DatabaseSerializer):
             columns = DatabaseTableColumns(many=True, allow_null=True, required=False, source="column_set")
             class Meta:
                 model = models.Table
-                fields = ("name", "columns")
+                fields = ("id", "name", "columns")
 
         tables = DatabaseTables(many=True, allow_null=True, required=False, source="table_set")
         class Meta:

@@ -222,7 +222,7 @@
         } else {
             $('.requires-select').removeClass('d-none')
             let deleteServersString = numberOfSelectedServers == 1 ? "Delete server" : `Delete servers (${numberOfSelectedServers})`
-            let addServersToGroupString = numberOfSelectedServers == 1 ? "Add server to a group" : `Add servers to a group (${numberOfSelectedServers})`
+            // let addServersToGroupString = numberOfSelectedServers == 1 ? "Add server to a group" : `Add servers to a group (${numberOfSelectedServers})`
 
             $("#delete-server-confirmation-modal .modal-body").text('Are you sure you want to delete the following databases?')
             let listOfServers = createElement('ul', [], null)
