@@ -32,4 +32,6 @@ views.ColumnConstraintViewSet, "constraints")
 
 server_routes = router.register("servers", views.ServerViewSet, "servers")
 
+create_server_request_routes = router.register("server_requests", views.CreateServerRequestViewSet, "server_requests")
+
 urlpatterns = router.urls

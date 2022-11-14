@@ -32,8 +32,8 @@ mysql_regex = re.compile("mysql", re.I)
 
 deletion_table_regex = re.compile("_deletion$")
 
-def encrypt(object, encoding='utf-8'):
-    f = Fernet(FERNET_KEY)
+def encrypt(object, encoding='utf-8', fernet_key=FERNET_KEY):
+    f = Fernet(fernet_key)
 
     string = object
     

@@ -51,6 +51,7 @@ class Server(models.Model):
     address = models.CharField(max_length=150, null=True, blank=True)
     port = models.IntegerField(null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    host = models.CharField(max_length=255, default="localhost")
     history = HistoricalRecords()
 
     def save(self, *args, **kwargs):
@@ -58,8 +59,8 @@ class Server(models.Model):
         
         return super().save(*args, **kwargs)
 
-    def __str__(self) -> str:
-        return f"{self.name} on {self.host}:{self.port}"
+    # def __str__(self) -> str:
+    #     return f"{self.name} on {self.host}:{self.port}"
 
 class CreateServerRequest(models.Model):
     time_made = models.DateTimeField(auto_now_add=True)

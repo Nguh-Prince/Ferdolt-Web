@@ -1,7 +1,8 @@
 import json
 import zipfile
 from rest_framework import viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, permission_classes
+from rest_framework import permissions as drf_permissions
 from rest_framework.response import Response
 from rest_framework import status
 from common.permissions import IsStaff
@@ -19,8 +20,8 @@ from django.db.models import Q
 from django.utils.translation import gettext as _
 from django.utils import timezone
 
-from common.viewsets import MultipleSerializerViewSet
-from core.functions import (decrypt, get_database_connection, get_database_details, 
+from common.viewsets import MultiplePermissionViewSet, MultipleSerializerViewSet
+from core.functions import (decrypt, encrypt, get_database_connection, get_database_details, 
                             get_dbms_booleans, initialize_database, synchronize_database)
 from ferdolt import tasks
 from ferdolt_web.settings import FERNET_KEY
@@ -539,13 +540,19 @@ class ColumnConstraintViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return models.ColumnConstraint.objects.all()
 
-class ServerViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
+class ServerViewSet(
+    viewsets.ModelViewSet, MultipleSerializerViewSet, 
+    MultiplePermissionViewSet
+):
     permission_classes = [ IsStaff ]
     serializer_class = serializers.ServerSerializer
     serializer_classes = {
         'delete': serializers.DeleteServersSerializer,
         'add_to_group': serializers.AddServersToGroupsSerializer,
         'request_server': serializers.CreateServerRequestSerializer
+    }
+    permission_classes_by_action = {
+        "request_server": [drf_permissions.AllowAny, ]
     }
 
     def get_queryset(self):
@@ -602,3 +609,29 @@ class ServerViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                 'message': _("Your request has been registered successfully. Please continuously check with the server to find out the requests's progress"), 
                 'data': serializer.data
             }, status=status.HTTP_201_CREATED )
+
+class CreateServerRequestViewSet(viewsets.ModelViewSet, MultiplePermissionViewSet):
+    serializer_class = serializers.CreateServerRequestSerializer
+    lookup_field = "code"
+    permission_classes = [ IsStaff ]
+    permission_classes_by_action = {
+        "retrieve": [ drf_permissions.AllowAny ]
+    }
+
+    def get_queryset(self):   
+        return models.CreateServerRequest.objects.all()
+
+    def retrieve(self, request, *args, **kwargs):
+        object: models.CreateServerRequest = self.get_object()
+        serializer = self.get_serializer(object)
+
+        json_data = json.dumps(serializer.data)
+
+        encrypted_string = encrypt(json_data, fernet_key=object.fernet_key)[1]
+
+        # encode the JSON data in the request's fernet key
+        return Response(
+            data={
+                encrypted_string
+            }
+        )
