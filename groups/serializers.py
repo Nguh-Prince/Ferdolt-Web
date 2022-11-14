@@ -211,10 +211,10 @@ class LinkColumnsToGroupColumnsSerializer(serializers.Serializer):
             column: Column = attrs['column']
             group_column: models.GroupColumn = attrs['group_column']
 
-            if column not in Column.objects.filter( table__schema__database__id__in=group_column.group_table.group.groupdatabase_set.values('database__id') ):
-                raise serializers.ValidationError( _("The column is not from a database that has been added to the %(group_name)s group" % { 'group_name': group_column.group_table.group.name }) )
+            # if column not in Column.objects.filter( table__schema__database__id__in=group_column.group_table.group.groupdatabase_set.values('database__id') ):
+            #     raise serializers.ValidationError( _("The column is not from a database that has been added to the %(group_name)s group" % { 'group_name': group_column.group_table.group.name }) )
 
-            return super().validate(attrs)
+            return attrs
 
     data = serializers.ListField(child=LinkColumnToGroupColumnSerializer())
 

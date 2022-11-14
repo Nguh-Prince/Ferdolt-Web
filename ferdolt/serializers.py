@@ -295,6 +295,14 @@ class AddServersToGroupsSerializer(DeleteServersSerializer):
 
         return data
 
+class CreateServerRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.CreateServerRequest
+        fields = (
+            "time_made", "code", "server_created", 
+            "is_accepted", "fernet_key", "name", "location"
+        )
+
 class TableRecordsSerializer(serializers.Serializer):
     database = serializers.CharField(max_length=150)
     schema = serializers.CharField(max_length=150)

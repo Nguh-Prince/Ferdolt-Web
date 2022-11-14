@@ -74,26 +74,36 @@
                     <label for="server-name-input" class="form-label">
                         {% trans "Server name" %}
                     </label>
-                    <input type="text" class="form-control" id="server-name-input" value="Local">
+                    <input type="text" class="form-control" id="server-name-input">
                 </div>
 
                 <div class="mb-3 row">
                     <div class="col-md-8">
                         <label for="server-address-input" class="form-label">{% trans "Hostname" %}</label>
                         <input type="text" class="form-control" id="server-address-input"
-                            placeholder="{% trans 'e.g. 192.168.100.25 or www.somesite.com' %}" value="localhost">
+                            placeholder="{% trans 'e.g. 192.168.100.25 or www.somesite.com' %}">
                     </div>
 
                     <div class="col-md-4">
                         <label for="server-port-input" class="form-label">{% trans "Port" %}</label>
                         <input id="server-port-input" type="number" class="form-control"
-                            placeholder="{% trans 'e.g. 8000' %}" value="8000">
+                            placeholder="{% trans 'e.g. 8000' %}">
                     </div>
                 </div>
 
                 <div class="mb-3">
                     <label for="server-location-input" class="form-label">{% trans "Location" %}</label>
-                    <textarea id="server-location-input" rows="3" class="form-control">Yaounde, Cameroon</textarea>
+                    <textarea id="server-location-input" rows="3" class="form-control"></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label for="server-username" class="form-label">{% trans "Username" %}</label>
+                    <input type="text" class="form-control" id="server-username">
+                </div>
+
+                <div class="mb-3">
+                    <label for="server-password" class="form-label">{% trans "Password" %}</label>
+                    <input type="password" class="form-control" id="server-password">
                 </div>
             </div>
 

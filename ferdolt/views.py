@@ -539,12 +539,13 @@ class ColumnConstraintViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return models.ColumnConstraint.objects.all()
 
-class ServerViewSet(MultipleSerializerViewSet, viewsets.ModelViewSet):
+class ServerViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
     permission_classes = [ IsStaff ]
     serializer_class = serializers.ServerSerializer
     serializer_classes = {
         'delete': serializers.DeleteServersSerializer,
-        'add_to_group': serializers.AddServersToGroupsSerializer
+        'add_to_group': serializers.AddServersToGroupsSerializer,
+        'request_server': serializers.CreateServerRequestSerializer
     }
 
     def get_queryset(self):
@@ -588,3 +589,16 @@ class ServerViewSet(MultipleSerializerViewSet, viewsets.ModelViewSet):
 
         return Response( data={"message": _("Successfully added the servers to the groups")} )
 
+    @action(
+        methods=["POST"], detail=False
+    )
+    def request_server(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        serializer.create(**serializer.validated_data)
+
+        return Response( data={ 
+                'message': _("Your request has been registered successfully. Please continuously check with the server to find out the requests's progress"), 
+                'data': serializer.data
+            }, status=status.HTTP_201_CREATED )

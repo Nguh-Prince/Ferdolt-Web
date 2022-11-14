@@ -1,5 +1,6 @@
 from django.core.exceptions import ImproperlyConfigured
 
+from rest_framework.serializers import Serializer
 from rest_framework import viewsets
 
 class MultipleSerializerViewSet(viewsets.GenericViewSet):
@@ -7,7 +8,7 @@ class MultipleSerializerViewSet(viewsets.GenericViewSet):
 
     }
     
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> Serializer:
         if not isinstance(self.serializer_classes, dict):
             raise ImproperlyConfigured(_("serializer_classes variable must be a dict mapping"))
 

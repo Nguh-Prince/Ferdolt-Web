@@ -472,8 +472,19 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         for item in serializer.validated_data['data']:
             group_column = item['group_column']
             column = item['column']
+            table = column.table
 
-            group_column_column = models.GroupColumnColumn.objects.create( column=column, group_column=group_column )
+            group_table_table = models.GroupTableTable.objects.filter(
+                table=table, group_table=group_column.group_table
+            )
+            if not group_table_table.exists():
+                models.GroupTableTable.objects.create(
+                    table=table, group_table=group_column.group_table
+                )
+
+            group_column_column = models.GroupColumnColumn.objects.create( 
+                column=column, group_column=group_column 
+            )
             
             created_group_column_columns.append(group_column_column)
 

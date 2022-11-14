@@ -719,25 +719,32 @@ function loadPeople() {
         }
     })
 }
+const DELETION_TABLE_REGEX = /(_deletion)$/g
 
-function getDatabaseTableObjects(databaseObject) {
+function getDatabaseTableObjects(databaseObject, includeDeletionTables=false) {
     var tableObjects = []
-
+    console.log(`The deletion table regex is: ${DELETION_TABLE_REGEX}`)
     databaseObject.schemas.map( (schema) => {
         schema.tables.map( (table) => {
-            tableObjects.push( {
-                ...table, 
-                schema: schema
-            } )
+            if ( DELETION_TABLE_REGEX.test(table.name) ) {
+                if (includeDeletionTables) {
+                    tableObjects.push( {
+                        ...table, 
+                        schema: schema.name
+                    } )
+                }
+            }
+            else {
+                tableObjects.push( {
+                    ...table, 
+                    schema: schema.name
+                } )
+            }
         } )
     } )
 
     return tableObjects
 }
-
-PRINT_SERVER_IP = "192.168.8.140"
-PRINT_SERVER_IP = "localhost"
-PRINT_SERVER_PORT = "33455"
 
 // Event listeners
 $('input').on('input', function () {

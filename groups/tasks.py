@@ -1,3 +1,4 @@
+import logging
 from huey import crontab
 from huey.contrib.djhuey import periodic_task, task
 from core.functions import get_database_connection
@@ -34,4 +35,3 @@ def create_missing_tables_and_columns_in_group_databases(group_id):
                     query = f"""
                     CREATE TABLE {table.name} ()
                     """
-            pass

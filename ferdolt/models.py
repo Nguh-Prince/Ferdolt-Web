@@ -17,6 +17,21 @@ from ferdolt_web.settings import FERNET_KEY
 
 f = fernet.Fernet(FERNET_KEY)
 
+def generate_random_string(length=10, include_uppercase=True, include_lowercase=False, include_digits=True, include_symbols=False, symbol_set:str=''):
+    if not include_uppercase and not include_lowercase and not include_digits and not include_symbols:
+        raise ValueError("At least one of the following must be true; include_uppercase, include_lowercase, include_digits, include_symbols")
+
+    string_set = ''
+    string_set += string.ascii_uppercase if include_uppercase else ''
+    string_set += string.ascii_lowercase if include_lowercase else ''
+    string_set += string.digits if include_digits else ''
+    
+    if include_symbols:
+        symbol_set = symbol_set if symbol_set else '~`!@#$%^&*()_-=+/?.>,<\|\\]}[{;:\'"'
+        string_set += symbol_set
+
+    return  ''.join(random.choices( string_set, k=length ))
+
 def generate_server_id(length=15):
     server_id = None
 
@@ -45,6 +60,16 @@ class Server(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} on {self.host}:{self.port}"
+
+class CreateServerRequest(models.Model):
+    time_made = models.DateTimeField(auto_now_add=True)
+    code = models.CharField(max_length=10, unique=True, default=generate_random_string)
+    server_created = models.ForeignKey(Server, on_delete=models.CASCADE, null=True)
+    is_accepted = models.BooleanField(null=True)
+    fernet_key = models.TextField()
+    name = models.CharField(max_length=50)
+    location = models.TextField()
+    notification_email_address = models.EmailField() # the address to send the request status notification to
 
 class DatabaseManagementSystem(models.Model):
     name = models.CharField(max_length=50, unique=True, null=False)
@@ -265,18 +290,3 @@ class ColumnConstraint(models.Model):
         # modify the level of the table if need be
         self.column.table.set_level()
         super().save(*args, **kwargs)
-
-def generate_random_string(length, include_uppercase=True, include_lowercase=False, include_digits=True, include_symbols=False, symbol_set:str=''):
-    if not include_uppercase and not include_lowercase and not include_digits and not include_symbols:
-        raise ValueError("At least one of the following must be true; include_uppercase, include_lowercase, include_digits, include_symbols")
-
-    string_set = ''
-    string_set += string.ascii_uppercase if include_uppercase else ''
-    string_set += string.ascii_lowercase if include_lowercase else ''
-    string_set += string.digits if include_digits else ''
-    
-    if include_symbols:
-        symbol_set = symbol_set if symbol_set else '~`!@#$%^&*()_-=+/?.>,<\|\\]}[{;:\'"'
-        string_set += symbol_set
-
-    return  ''.join(random.choices( string_set, k=length ))

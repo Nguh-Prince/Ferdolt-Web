@@ -20,7 +20,8 @@ from core.functions import encrypt, decrypt
 from ferdolt import models as ferdolt_models
 from flux.models import Extraction, Synchronization
 
-from huey.contrib import djhuey as huey
+# from huey.contrib import djhuey as huey
+from huey.contrib.djhuey import periodic_task, task
 
 def generate_unique_fernet_key():
     while True:
@@ -104,6 +105,13 @@ class GroupServer(models.Model):
                     group_server=self, extraction=extraction, 
                     is_applied=False, time_applied=None
                 )
+
+class JoinGroupRequest(models.Model):
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    target_server = models.ForeignKey(ferdolt_models.Server, on_delete=models.CASCADE)
+    source_server = models.ForeignKey(ferdolt_models.Server, on_delete=models.CASCADE, related_name='joingrouprequests')
+    time_made = models.DateTimeField()
+    is_accepted = models.BooleanField(null=True)
 
 class GroupDatabase(models.Model):
     database = models.ForeignKey(ferdolt_models.Database, on_delete=models.CASCADE, null=True)
@@ -196,9 +204,48 @@ class GroupColumn(models.Model):
         self.name = self.name.lower()
         super().save(*args, **kwargs)
 
+@task()
+def link_groupcolumncolumn_table_and_database_to_group(group_column_column_id):
+    try:
+        group_column_column = models.GroupColumnColumn.objects.get( id=group_column_column_id )
+        group_table = group_column_column.group_column.group_table
+        table = group_column_column.column.table
+        database = group_column_column.column.table.schema.database
+        group = group_column_column.group_column.group_table.group
+
+        group_table_query = models.GroupTableTable.objects.filter(
+            group_table=group_table, 
+            table=table
+        )
+
+        group_database_query = models.GroupDatabase.objects.filter(
+            database=database,
+            group=group
+        )
+
+        if not group_database_query.exists():
+            models.GroupDatabase.objects.create(
+                database=database,
+                group=group
+            )
+        
+        if not group_table_query.exists():
+            models.GroupTableTable.objects.filter(
+                group_table=group_table,
+                table=table
+            )
+
+
+    except models.GroupColumnColumn.DoesNotExist as e:
+        logging.error( f"Error when executing the link_groupcolumncolumn_table_and_database_to_group task. {str(e)}" )
+
 class GroupColumnColumn(models.Model):
     group_column = models.ForeignKey(GroupColumn, on_delete=models.CASCADE)
     column = models.ForeignKey( ferdolt_models.Column, on_delete=models.CASCADE )
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        link_groupcolumncolumn_table_and_database_to_group(self.id)
 
 class GroupColumnConstraint(models.Model):
     column = models.ForeignKey(GroupColumn, on_delete=models.CASCADE)

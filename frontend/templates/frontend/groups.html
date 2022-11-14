@@ -271,7 +271,12 @@
                             <li>
                                 <div class="mb-3">
                                     <label for="database-table-to-link-to" class="form-label">{% trans "Link to " %}</label>
-                                    <select name="{{ table.name.lower }}-{{ table.id }}-target-table" id="" class="form-select database-tables-to-link">
+                                    <select 
+                                        name="{{ table.name.lower }}-{{ table.id }}-target-table" 
+                                        class="form-select database-tables-to-link" 
+                                        data-group-table="{{ table.id }}"
+                                        data-group-table-name="{{ table.name }}"
+                                    >
                                         <option value="-1">{% trans "---" %}</option>
                                     </select>
                                 </div>
@@ -293,7 +298,13 @@
                                             <td>{{ column.data_type }}</td>
                                             <td>{{ column.character_maximum_length }}</td>
                                             <td>
-                                                <select id="{{ column.name.lower }}-{{ column.id }}-target" class="form-select">
+                                                <select 
+                                                    id="{{ column.name.lower }}-{{ column.id }}-target" 
+                                                    class="form-select database-columns-to-link" 
+                                                    data-group-column="{{ column.id }}"
+                                                    data-group-column-name="{{ column.name }}"
+                                                    data-group-table="{{ table.id }}"
+                                                >
                                                     <option value="-1">{% trans "---" %}</option>
                                                 </select>
                                             </td>
@@ -504,7 +515,6 @@
     })
 
     function getGroups() {
-        console.log("Getting the groups from the API ")
         $.ajax({
             type: 'GET',
             url: `http://${location.host}${API_URL}/ferdolt/groups/`,
@@ -531,9 +541,7 @@
     }
 
     $(".accordion-button").click(function() {
-        console.log("Clicked accordion-button")
         let targetSelector = $(this).attr("data-bs-target")
-        console.log(`The target is: ${targetSelector}`)
 
         if (targetSelector) {
             $(targetSelector).toggleClass('show ')
@@ -547,7 +555,6 @@
     })
 
     function showDatabaseModal(selectedValues) {
-        console.log("Calling showDatabaseModal")
         if (selectedValues.includes('-1')) {
             // open the new database modal
             $("#open-group-detail-modal").click()
@@ -556,9 +563,6 @@
 
     $("#add-database-select-database").change(function() {
         let value = $(this).val()
-
-        console.log("The select database input changed. Its value is")
-        console.log(value)
 
         showDatabaseModal(value)
     })
@@ -585,18 +589,13 @@
     
     $("#submit-new-database-form").click( function() {
         let databaseObject = getDatabaseObjectFromNewDatabaseModal();
-        console.log(`The database object gotten from the modal is`)
-        console.log(databaseObject)
 
         addDatabaseToGroup(null, databaseObject)
     } )
 
     function addColumnsToNewTable(count = 1) {
-        console.log("The number of columns to add is")
-        console.log(count)
 
         for (let i = 0; i < count; i++) {
-            console.log(`Inserting row ${i+1}`)
             let rowId = generateRandomId()
             let row = createElement('tr ', [], {
                 id: rowId
@@ -742,8 +741,6 @@
     }
 
     function displayGroupObject(object, nameInputSelector, tablesAccordionContainer) {
-        console.log("displaying group...")
-        console.log(object);
 
         $(nameInputSelector).val(object.name)
 
@@ -897,6 +894,8 @@
                 displayMessage("Group has been created successfully", ["alert", "alert-success", "alert-dismissible"])
             },
             error: function(data) {
+                displayRequestErrors(data)
+                console.log("Error in the request, printing the server's response")
                 console.log(data.responseJSON)
                 console.log(data.responseText)
             }
@@ -908,10 +907,10 @@
 <script>
     const ADD_DATABASE_SELECT_DATABASE_NON_SELECTED = -5
     var SELECTED_DATABASE = null
+    var SELECTED_DATABASE_TABLES = []
 
     $("#add-database-select-database").change( function(){
         let value = this.value;
-        console.log(`The database select changed to: ${value}`)
 
         if (value != ADD_DATABASE_SELECT_DATABASE_NON_SELECTED) {
             let flag = false;
@@ -943,9 +942,12 @@
         }
     } )
 
+    const GROUP_TABLE_SCHEMA_AND_TABLE_REGEX = "(\\w+)__(\\w+)"
+
     $("#submit-add-database-to-group-form").click( () => {
         if (SELECTED_DATABASE) {
             let databaseTables = getDatabaseTableObjects(SELECTED_DATABASE)
+            SELECTED_DATABASE_TABLES = databaseTables
 
             // populate the different table selects with options for each of this database's tables
             let optionsArray = []
@@ -953,18 +955,163 @@
             databaseTables.map( (item) => {
                 let option = createElement( 'option', [], { value: item.id } )
                 $(option).text( `${item.schema}.${item.name}` )
-                optionsArray.push(option)
+
+                optionsArray.push({
+                    id: item.id,
+                    name: item.name,
+                    node: option,
+                    schema: item.schema,
+                    textContent: `${item.schema}.${item.name}`,
+                })
             } )
 
             $(".database-tables-to-link").each( function() {
+                let groupTableName = $(this).attr('data-group-table-name').toLowerCase()
+
+                let regexMatches = groupTableName.match( GROUP_TABLE_SCHEMA_AND_TABLE_REGEX )
+
+                let schemaName = regexMatches[1]
+                let tableName = regexMatches[2]
+
                 optionsArray.map( (option) => {
-                    $(this).append( option.cloneNode() )
+                    let node = option.node.cloneNode()
+                    
+                    // setting the value of the select to the table in the database with the same 
+                    // schema and name as that of the group table
+                    if (schemaName == option.schema && tableName == option.name) {
+                        $(node).attr('selected', true)
+                        $(this).val(option.id)
+                    }
+
+                    $(node).text( option.textContent )
+                    $(this).append(node)
+
+                    updateGroupTableColumns(this)
                 } )
             } )
 
             $("#link-group-tables-to-database-tables-modal-trigger").click()
         }
     } )
+
+    $(".database-tables-to-link").change( function() {
+        updateGroupTableColumns(this)
+    } )
+
+    function updateGroupTableColumns(groupTableSelectNode) {
+        let groupTableId = $(groupTableSelectNode).attr('data-group-table')
+        let value = $(groupTableSelectNode).val()
+        
+        if (value != -1) {
+            // get the columns of the selected table
+            let columns = getTableColumns(value, SELECTED_DATABASE_TABLES)
+            
+            if (columns) {
+                let columnOptions = createOptionsFromDatabaseColumns( columns )
+
+                // get all the group columns that are found in this group table
+                $(`.database-columns-to-link[data-group-table="${groupTableId}"]`).each( function() {
+                    let groupColumnName = $(this).attr('data-group-column-name').toLowerCase()
+
+                    columnOptions.map( (item) => {
+                        let node = item.node.cloneNode()
+                        node.textContent = item.textContent
+                        
+                        if (item.textContent == groupColumnName) {
+                            $(node).attr('selected', true)
+                            $(this).val(item.id)
+                        }
+
+                        $(this).append( node )
+                    } )
+                } )
+            }
+        }
+    }
+
+    function getTableColumns(tableId, tableObjects) {
+        for (let i=0; i<tableObjects.length; i++) {
+            let tableObject = tableObjects[i]
+
+            if (tableObject.id == tableId) {
+                let columnObject = {}
+
+                tableObject.columns.map( (item) => {
+                    columnObject[ item.name ] = item
+                } )
+
+                return columnObject
+            }
+        }
+
+        return null
+    }
+
+    function createOptionsFromDatabaseColumns(columnsObject) {
+        let optionsArray = []
+
+        for ( let key of Object.keys(columnsObject) ) {
+            let column = columnsObject[key]
+
+            let option = createElement('option', [], { value: column.id })
+
+            optionsArray.push( {
+                node: option,
+                textContent: column.name,
+                id: column.id
+            } )
+        }
+
+        return optionsArray
+    }
+
+    $("#link-database-to-group").click( () => {
+        console.log('Linking the selected database to the group')
+        linkGroupColumnsToDatabaseColumns()
+    } )
+
+    function linkGroupColumnsToDatabaseColumns() {
+        let formData = {
+            data: []
+        }
+
+        $('.database-columns-to-link').each( function() {
+            let groupColumnID = $(this).attr('data-group-column')
+            let columnID = $(this).val()
+
+            if (columnID != -1) {
+                let object = {
+                    group_column: groupColumnID,
+                    column: columnID
+                }
+
+                formData.data.push(object)
+            }
+        } )
+
+        console.log(`The data to be passed to the API is`)
+        console.log(formData)
+
+        $.ajax({
+            type: 'PATCH',
+            url: `http://${location.host}${API_URL}/ferdolt/groups/{{ group.id }}/link_columns/`,
+            headers: {
+                "X-CSRFTOKEN": getCsrfTokenCookie()
+            },
+            data: JSON.stringify(formData),
+            contentType: 'application/json',
+            success: function(data) {
+                displayMessage( 
+                    'Columns have been linked successfully. Please close the modal', 
+                    ['alert-dismissible', 'alert-success'] 
+                )
+            }, 
+            error: function(data) {
+                displayRequestErrors(data)
+            }
+        })
+    
+    }
 </script>
 {% endif %}
 {% endblock %}
