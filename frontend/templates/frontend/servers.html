@@ -1,6 +1,14 @@
 {% extends 'frontend/base-template.html' %}
 {% load i18n static %}
 
+{% block extra_styles %}
+<style>
+    .server-action {
+        width: 64px;
+    }
+</style>
+{% endblock %}
+
 {% block breadcrumbs %}
 
 {% if server %}
@@ -15,44 +23,104 @@
     {% trans 'Servers' %}
 </li>
 {% endif %}
+{% endblock %}
 
+{% block tabs %}
+{% if not server %}
+<ul class="nav nav-tabs" role="tablist">
+    <li class="nav-item active" role="presentation">
+        <button class="nav-link active" data-bs-toggle="servers" data-bs-target="#servers-container" id="servers-tab" aria-current="page">
+            {% trans "Servers" %}
+        </button>
+    </li>
+
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#server-requests" id="server-requests-tabs" aria-current="page">
+            {% trans 'Server requests' %}
+        </button>
+    </li>
+</ul>
+{% endif %}
 {% endblock %}
 
 {% block page_content %}
 <div class="page-content">
     <div class="container-fluid">
         {% if not server %}
-        .<div class="row">
-            <div class="col-sm-12">
-                <div class="page-title-box row">
-                    <div class="row col-md-6 justify-content-start">
-                        <div class="col-auto align-self-center d-none requires-select" id="delete-servers-button-container">
-                            <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#delete-server-confirmation-modal">
-                                <i data-feather="trash" class="small-icon"></i> {% trans "Delete server" %}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="row col-md-6 justify-content-end">
-                        <div class="col-auto align-self-center">
-                            <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
-                                data-bs-target="#new-server-modal">
-                                <i data-feather="plus" class="small-icon me-2"></i>{% trans "Add server" %}
-                            </button>
-                        </div>
-
-                        <div class="col-auto align-self-center d-none requires-select" id="add-server-to-synchronization-group">
-                            <button class="btn btn-outline-orange btn-sm add-file" data-bs-toggle="modal" data-bs-target="#">
-                                {% trans "Add databases to synchronization group" %}
-                            </button>
+        <div class="tab-content" id="my-tab-content">
+            <div class="tab-pane fade show active my-2" id="servers-container" role="tabpanel" aria-labelledby="servers-tab">
+                .<div class="row">
+                    <div class="col-sm-12">
+                        <div class="page-title-box row">
+                            <div class="row col-md-6 justify-content-start">
+                                <div class="col-auto align-self-center d-none requires-select" id="delete-servers-button-container">
+                                    <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#delete-server-confirmation-modal">
+                                        <i data-feather="trash" class="small-icon"></i> {% trans "Delete server" %}
+                                    </button>
+                                </div>
+                            </div>
+        
+                            <div class="row col-md-6 justify-content-end">
+                                <div class="col-auto align-self-center">
+                                    <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                                        data-bs-target="#new-server-modal">
+                                        <i data-feather="plus" class="small-icon me-2"></i>{% trans "Add server" %}
+                                    </button>
+                                </div>
+        
+                                <div class="col-auto align-self-center d-none requires-select" id="add-server-to-synchronization-group">
+                                    <button class="btn btn-outline-orange btn-sm add-file" data-bs-toggle="modal" data-bs-target="#">
+                                        {% trans "Add servers to synchronization group" %}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
+        
+                <div class="row py-2" id="servers">
+                    
+                </div>
             </div>
-        </div>
 
-        <div class="row py-2" id="servers">
-            
+            <div class="tab-pane fade show my-2" id="server-requests" role="tabpanel" aria-labelledby="server-requests-tab">
+                {% if server_requests %}
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Time made" %}</th>
+                            <th>{% trans "Request server name" %}</th>
+                            <th>{% trans "Notification email address" %}</th>
+                            <th>{% trans "Actions" %}</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for request in server_requests %}
+                        <tr>
+                            <td>{{ request.time_made }}</td>
+                            <td>{{ request.name }}</td>
+                            <td>{{ request.notification_email_address }}</td>
+                            <td>
+                                {% if request.is_accepted is None %}
+                                <div class="row">
+                                    <button class="btn btn-danger mx-2">{% trans "Reject" %}</button>
+                                    <button class="btn btn-primary mx-2">{% trans "Accept" %}</button>
+                                </div>
+                                {% elif request.is_accepted %}
+                                <p>{% trans "Accepted" %}</p>
+                                {% else %}
+                                <p>{% trans "Rejected" %}</p>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <h3 class="text-secondary">{% trans "There are currently no requests" %}</h3>
+                {% endif %}
+            </div>
         </div>
         {% else %}
         {% endif %}
@@ -259,7 +327,11 @@
             name: $("#server-name-input").val(),
             address: $("#server-address-input").val(),
             port: $("#server-port-input").val(),
-            location: $("#server-location-input").val()
+            location: $("#server-location-input").val(),
+            user: {
+                username: $("#server-username").val(),
+                password: $("#server-password").val()
+            }
         }
 
         $.ajax({
@@ -268,9 +340,10 @@
             headers: {
                 "X-CSRFTOKEN": getCsrfTokenCookie()
             },
-            data: formData,
+            contentType: "application/json",
+            data: JSON.stringify(formData),
             success: function (data) {
-                console.log("Gotten the servers from the API")
+                console.log("Gotten the newly created server from the API")
                 displayMessage("Server added successfully.", ["alert", "alert-dismissible", "alert-success"])
 
                 state.servers.push(data)
@@ -293,7 +366,7 @@
             elements: [
                 {
                     tag: "div",
-                    classes: "card-body".split(' '),
+                    classes: "card-body px-4".split(' '),
                     attributes: null,
                     elements: [
                         {
@@ -312,9 +385,21 @@
                             attributes: { textContent: `Location: ${serverObject.location}` }
                         },
                         {
-                            tag: "button",
-                            classes: "btn btn-primary modify-server".split(' '),
-                            attributes: { id: `server-${id}-details`, "data-bs-toggle": "modal", "data-bs-target": "#server-detail-modal", textContent: "Modify" }
+                            tag: "div",
+                            classes: "row".split(' '),
+                            attributes: null,
+                            elements: [
+                                {
+                                    tag: "button",
+                                    classes: "btn btn-blue mx-2 modify-server server-action".split(' '),
+                                    attributes: { id: `server-${id}-details`, "data-bs-toggle": "modal", "data-bs-target": "#server-detail-modal", textContent: "Modify" }
+                                },
+                                {
+                                    tag: "a",
+                                    classes: "btn btn-primary mx-2 view-server server-action".split(' '),
+                                    attributes: { id: `server-${id}-view`, "data-bs-toggle": "modal", textContent: "Open", href: `/servers/${serverObject.server_id}` }
+                                }
+                            ]
                         }
                     ]
                 },

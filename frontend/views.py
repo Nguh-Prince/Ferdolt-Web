@@ -362,14 +362,15 @@ def file_manager(request):
     return render(request, "frontend/file_manager.html")
 
 @login_required
-def servers(request, id: int=None):
+def servers(request, id: str=None):
     if not id:
         servers = ferdolt_models.Server.objects.all()
+        server_requests = ferdolt_models.CreateServerRequest.objects.all()
 
-        return render(request, "frontend/servers.html", context={'servers': servers})
+        return render(request, "frontend/servers.html", context={'servers': servers, 'server_requests': server_requests})
     
     else:
-        query = ferdolt_models.Server.objects.filter(id=id)
+        query = ferdolt_models.Server.objects.filter(server_id=id)
 
         if not query.exists():
             return redirect("frontend:not_found")

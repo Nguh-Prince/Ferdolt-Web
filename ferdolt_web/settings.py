@@ -123,7 +123,8 @@ DATABASES = {
         'USER': env('DATABASE_USERNAME'),
         'PASSWORD': env('DATABASE_PASSWORD'),
         'HOST': env('DATABASE_HOST'),
-        'PORT': env('DATABASE_PORT')
+        'PORT': env('DATABASE_PORT'),
+        'ATOMIC_REQUESTS': True
     }
 }
 

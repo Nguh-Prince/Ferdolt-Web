@@ -558,6 +558,9 @@ class ServerViewSet(
     def get_queryset(self):
         return models.Server.objects.all()
 
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
     @action(
         methods=["DELETE"], detail=False
     )

@@ -1,7 +1,10 @@
 import logging
-from rest_framework import serializers
-import sqlite3
+
+from django.contrib.auth.models import User
 from django.utils.translation import gettext as _
+
+from rest_framework import serializers
+from rest_framework.authtoken.models import Token
 
 import psycopg
 import pyodbc
@@ -245,14 +248,66 @@ class ColumnConstraintSerializer(serializers.ModelSerializer):
         fields = ("column", "is_primary_key", "is_foreign_key")
 
 class ServerSerializer(serializers.ModelSerializer):
+    class ServerUserSerializer(serializers.ModelSerializer):
+        auth_token = serializers.SerializerMethodField()
+
+        class Meta:
+            model = User
+            fields = ("id", "username", "password", "auth_token")
+            extra_kwargs = {
+                "password": {"write_only": True},
+                "username": { "validators": [] }
+            }
+
+        def get_auth_token(self, obj):
+            token = Token.objects.get_or_create(user=obj)
+            return token[0].key
+
+    user = ServerUserSerializer(required=False, allow_null=True)
+    request = serializers.IntegerField(allow_null=True, required=False, write_only=True)
+
+    def validate_request(self, data) -> models.CreateServerRequest:
+        query = models.CreateServerRequest.objects.filter(id=data)
+
+        if not query.exists():
+            raise serializers.ValidationError(_("No server request exists with id '%(id)d'" % { 'id': data }))
+        else:
+            request: models.CreateServerRequest = query.first()
+
+            if request.is_accepted is not None:
+                raise serializers.ValidationError(_("This request has already been treated. A new server cannot be created from it"))
+            
+            return request
+
     class Meta:
         model = models.Server
-        fields = ( "id", "name", "address", "port", "location", "server_id" )
+        fields = ( "id", "name", "address", "port", "location", "server_id", "user", "request" )
         extra_kwargs = {
             "server_id": {"read_only": True},
             "port": {"required": False, "allow_null": True},
             "address": {"required": False, "allow_null": True}
         }
+
+    def validate_user(self, data):
+        if User.objects.filter(username=data['username']).exists():
+            raise serializers.ValidationError(_("The username %(name)s has already been taken" % {'name': data['username']}))
+        else:
+            user = User.objects.create(username=data['username'])
+            user.set_password(data['password'])
+
+            return user
+
+    def create(self, validated_data):
+        user = validated_data.pop("user") if "user" in validated_data else None
+        request = validated_data.pop("request") if "request" in validated_data else None
+
+        server = models.Server.objects.create(**validated_data, user=user)
+
+        if request is not None:
+            request.server = server
+            request.save()
+
+        return server
 
 class DeleteServersSerializer(serializers.Serializer):
     servers = serializers.ListField(child=serializers.IntegerField())
