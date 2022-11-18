@@ -26,21 +26,37 @@
 {% endblock %}
 
 {% block tabs %}
-{% if not server %}
 <ul class="nav nav-tabs" role="tablist">
-    <li class="nav-item active" role="presentation">
-        <button class="nav-link active" data-bs-toggle="servers" data-bs-target="#servers-container" id="servers-tab" aria-current="page">
-            {% trans "Servers" %}
-        </button>
-    </li>
+    {% if not server %}
+        <li class="nav-item active" role="presentation">
+            <button class="nav-link active" data-bs-toggle="servers" data-bs-target="#servers-container" id="servers-tab" aria-current="page">
+                {% trans "Servers" %}
+            </button>
+        </li>
 
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#server-requests" id="server-requests-tabs" aria-current="page">
-            {% trans 'Server requests' %}
-        </button>
-    </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#server-requests" id="server-requests-tabs" aria-current="page">
+                {% trans 'Server requests' %}
+            </button>
+        </li>
+    {% else %}
+        <li class="nav-item active" role="presentation">
+            <button class="nav-link active" data-bs-toggle="servers" data-bs-target="#registered-servers" id="servers-tab" aria-current="page">
+                {% trans "Registered servers" %}
+            </button>
+        </li>
+
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#server-groups" id="server-groups-tabs" aria-current="page">
+                {% trans 'Groups' %}
+            </button>
+        </li>
+
+        <!-- <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#"></button>
+        </li> -->
+    {% endif %}
 </ul>
-{% endif %}
 {% endblock %}
 
 {% block page_content %}
@@ -123,6 +139,42 @@
             </div>
         </div>
         {% else %}
+        <div class="tab-content" id="my-tab-content">
+            <div class="tab-pane fade show active my-2" id="servers-container" role="tabpanel" aria-labelledby="servers-tab">
+                .<div class="row">
+                    <div class="col-sm-12">
+                        <div class="page-title-box row">
+                            <div class="row col-md-6 justify-content-start">
+                                <div class="col-auto align-self-center d-none requires-select" id="delete-servers-button-container">
+                                    <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#delete-server-confirmation-modal">
+                                        <i data-feather="trash" class="small-icon"></i> {% trans "Delete server" %}
+                                    </button>
+                                </div>
+                            </div>
+        
+                            <div class="row col-md-6 justify-content-end">
+                                <div class="col-auto align-self-center">
+                                    <button class="btn btn-outline-primary btn-sm add-file" data-bs-toggle="modal"
+                                        data-bs-target="#new-server-request">
+                                        <i data-feather="plus" class="small-icon me-2"></i>{% trans "Request server" %}
+                                    </button>
+                                </div>
+        
+                                <div class="col-auto align-self-center d-none requires-select" id="add-server-to-synchronization-group">
+                                    <button class="btn btn-outline-orange btn-sm add-file" data-bs-toggle="modal" data-bs-target="#">
+                                        {% trans "Add servers to synchronization group" %}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+        
+                <div class="row py-2" id="servers">
+                    
+                </div>
+            </div>
+        </div>
         {% endif %}
     </div>
 </div>
@@ -172,6 +224,44 @@
                 <div class="mb-3">
                     <label for="server-password" class="form-label">{% trans "Password" %}</label>
                     <input type="password" class="form-control" id="server-password">
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="submit-new-database-form" onclick="submitNewServer()">{% trans "Submit" %}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="new-server-request" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">{% trans "Request Server" %}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="server-name-input" class="form-label">
+                        {% trans "Server name" %}
+                    </label>
+                    <input type="text" class="form-control" id="server-name-input">
+                </div>
+
+                <div class="mb-3 row">
+                    <div class="col-md-8">
+                        <label for="server-address-input" class="form-label">{% trans "Location" %}</label>
+                        <input type="text" class="form-control" id="server-address-input"
+                            placeholder="{% trans 'e.g. Yaounde, Douala, etc.' %}">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="server-port-input" class="form-label">{% trans "Notification email address" %}</label>
+                        <input id="server-port-input" type="email" class="form-control"
+                            placeholder="{% trans 'e.g. johndoe23@gmail.com' %}">
+                    </div>
                 </div>
             </div>
 
@@ -581,5 +671,6 @@
             })
         }
     }
+
 </script>
 {% endblock %}

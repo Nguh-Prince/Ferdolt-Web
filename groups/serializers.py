@@ -322,3 +322,26 @@ class ServerPendingSynchronizationsSerializer(serializers.Serializer):
             )
 
         return query.first()
+
+class RemoveGroupTablesSerializer(serializers.Serializer):
+    tables = serializers.ListField(child=serializers.IntegerField())
+
+    def validate_tables(self, data):
+        temporary_list = []
+        validation_errors = []
+
+        for table in data:
+            try:
+                group_table = models.GroupTable.objects.filter(id=table)
+                temporary_list.append(group_table)
+            except models.GroupTable.DoesNotExist as e:
+                validation_errors.append(serializers.ValidationError(
+                    _("No group table exists with id: %(id)d" % { 'id': table })
+                ))
+
+                break
+
+        if len(validation_errors) > 0:
+            raise serializers.ValidationError(validation_errors)
+
+        return temporary_list

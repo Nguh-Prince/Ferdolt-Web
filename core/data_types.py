@@ -1,6 +1,6 @@
 data_types = { 
     "varchar", "date", "datetime", 
-    "integer", "float", "double", 
+    "integer", "float", "double", "bigint", 
     "smallint", "boolean", "numeric", 
     "text", "char", "timestamp"
 }

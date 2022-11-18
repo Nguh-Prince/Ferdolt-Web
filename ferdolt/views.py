@@ -165,6 +165,12 @@ class DatabaseViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
                 file_path = synchronization.extraction.file.file.path
                 file = synchronization.extraction.file
 
+                if synchronization.extraction.groupextraction:
+                    print("Performing synchronization of a group extraction")
+                    group = synchronization.extraction.groupextraction.group
+
+                    f = fernet.Fernet(group.fernet_key)
+
                 try:
                     with zipfile.ZipFile(file_path) as zip_file:
                         for file in zip_file.namelist():
@@ -552,11 +558,16 @@ class ServerViewSet(
         'request_server': serializers.CreateServerRequestSerializer
     }
     permission_classes_by_action = {
-        "request_server": [drf_permissions.AllowAny, ]
+        "request_server": [drf_permissions.AllowAny, ],
+        "list": [drf_permissions.AllowAny]
     }
 
     def get_queryset(self):
-        return models.Server.objects.all()
+        user = self.request.user
+        if user.is_authenticated and user.is_staff:
+            return models.Server.objects.all()
+        else:
+            return models.Server.objects.filter(user=user)
 
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)

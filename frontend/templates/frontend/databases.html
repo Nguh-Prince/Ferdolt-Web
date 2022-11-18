@@ -948,6 +948,8 @@
                     state.databases.push(data)
                     displayDatabase(data)
                 }
+
+                displayMessage("Database added successfully", ["alert-success", "alert-dismissible"])
             },
             error: function(data) {
                 console.log("error message: ")

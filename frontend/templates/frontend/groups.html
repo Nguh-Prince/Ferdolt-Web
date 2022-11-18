@@ -12,14 +12,14 @@
 </li>
 {% endif %} {% endblock %} {% block tabs %} {% if group %}
 <ul class="nav nav-tabs" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#structure" id="structure-tab" aria-current="page">
+    <li class="nav-item active" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#structure" id="structure-tab" aria-current="page">
             {% trans "Structure" %}
         </button>
     </li>
 
-    <li class="nav-item active" role="presentation">
-        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#databases" id="databases-tab">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link =" data-bs-toggle="tab" data-bs-target="#databases" id="databases-tab">
             {% trans "Databases" %}
         </button>
     </li>
@@ -56,9 +56,20 @@
 </div>
 {% else %}
 <div class="tab-content" id="groups-page-tab-content">
-    <div class="tab-pane fade show my-2" id="structure" role="tabpanel" aria-labelledby="structure-tab">
+    <div class="tab-pane fade show active my-2" id="structure" role="tabpanel" aria-labelledby="structure-tab">
         <div class="row">
-            <div class="col-sm-12">
+            <div class="col-sm-6">
+                <div class="page-title-box row">
+                    <div class="row justify-content-start">
+                        <div class=" col-auto align-self-center " id="left-actions-buttons-container ">
+                            <button class="btn btn-outline-danger btn-sm mx-2" id="delete-group-tables">
+                                            <i data-feather="download " style="width: 16; height: 16; "></i> {% trans "Delete tables" %}
+                                        </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6">
                 <div class="page-title-box row">
                     <div class="row justify-content-end">
                         <div class=" col-auto align-self-center " id="actions-buttons-container ">
@@ -81,7 +92,7 @@
                 <li class="cd-accordion__item cd-accordion__item--has-children">
                     <input class="cd-accordion__input" type="checkbox" name="{{ table.name.lower }}-{{table.id}}" id="{{ table.name.lower }}-{{table.id}}">
                     <label class="cd-accordion__label cd-accordion__label--icon-folder" for="{{ table.name.lower }}-{{table.id}}">
-                        <input type="checkbox" class="mx-2 select-table" data-table-id="{{ table.id }}"
+                        <input type="checkbox" class="mx-2 select-group-table" data-table-id="{{ table.id }}"
                             data-schema-id="{{ schema.id }}" name="select-{{ table.name.lower }}-{{table.id}}">
                         <span>{{ table.name }}</span></label>
 
@@ -114,7 +125,7 @@
         </div>
     </div>
 
-    <div class="tab-pane fade show active my-2" id="databases" role="tabpanel" aria-labelledby="databases-tab">
+    <div class="tab-pane fade show my-2" id="databases" role="tabpanel" aria-labelledby="databases-tab">
         <div class="row">
             <div class="col-sm-12">
                 <div class="page-title-box row">
@@ -907,7 +918,9 @@
 <script>
     const ADD_DATABASE_SELECT_DATABASE_NON_SELECTED = -5
     var SELECTED_DATABASE = null
-    var SELECTED_DATABASE_TABLES = []
+    var SELECTED_DATABASE_TABLES = new Set([])
+
+    var SELECTED_GROUP_TABLES = new Set([])
 
     $("#add-database-select-database").change( function(){
         let value = this.value;
@@ -997,6 +1010,58 @@
     $(".database-tables-to-link").change( function() {
         updateGroupTableColumns(this)
     } )
+
+    $('.select-group-table').change( function() {
+        let checked = $(this).prop('checked')
+        let tableId = $(this).attr('data-table-id')
+        console.log(`Select group table checkbox has changed. Checked: ${checked}, tableID: ${tableId}`)
+
+        if (checked) {
+            SELECTED_GROUP_TABLES.add(tableId)
+        } else {
+            SELECTED_GROUP_TABLES.delete(tableId)
+        }
+
+        if (SELECTED_GROUP_TABLES.size > 0) {
+
+        } else {
+
+        }
+    } )
+
+    $("#delete-group-tables").click( function() {
+        if (SELECTED_GROUP_TABLES.size > 0) {
+            console.log("Deleting group tables")
+            deleteGroupTables()
+        }
+    } )
+
+    function deleteGroupTables() {
+        let formData = {
+            tables: Array.from(SELECTED_GROUP_TABLES)
+        }
+
+        $.ajax({
+            type: 'DELETE',
+            url: `http://${location.host}${API_URL}/ferdolt/groups/{{ group.id }}/delete_grouptables/`,
+            headers: {
+                'X-CSRFTOKEN': getCsrfTokenCookie()
+            },
+            data: JSON.stringify(formData),
+            contentType: 'application/json',
+            success: function(data) {
+                displayMessage( 
+                    'Tables have been deleted successfully. Reload the page to see changes', 
+                    ['alert-dismissible', 'alert-success'] 
+                )
+            },
+            error: function(data) {
+                displayRequestErrors(data)
+                console.log(formData)
+                console.log(data.responseJSON)
+            }
+        })
+    }
 
     function updateGroupTableColumns(groupTableSelectNode) {
         let groupTableId = $(groupTableSelectNode).attr('data-group-table')

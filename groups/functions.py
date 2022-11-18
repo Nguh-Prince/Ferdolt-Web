@@ -48,6 +48,7 @@ def extract_from_groupdatabase(
 
             if latest_extraction:
                 start_time = latest_extraction.time_made
+                print(f"Extracting records updated after: {latest_extraction.time_made}")
     
     time_made = timezone.now()
 
@@ -138,7 +139,9 @@ def extract_from_groupdatabase(
                 if ( "rows" in table_dictionary and len(table_dictionary["rows"]) > 0 ) or ( "deleted_rows" in table_dictionary and len(table_dictionary["deleted_rows"]) > 0):
                     group_dictionary.setdefault( table.name.lower(), table_dictionary )
 
-            if results.keys():
+            if group_dictionary.keys():
+                print("There was data to extract from the group database. Saving the data to a file")
+                print(f"The data's keys are: {group_dictionary.keys()}")
                 base_file_name = os.path.join( settings.BASE_DIR, settings.MEDIA_ROOT, 
                 "extractions", f"{timezone.now().strftime('%Y%m%d%H%M%S')}")
 
@@ -434,11 +437,16 @@ def synchronize_group_database(group_database: models.GroupDatabase, use_primary
                                     try:
                                         if merge_query: 
                                             cursor.execute(merge_query)
+                                            connection.commit()
+                                            print(f"Successfully synchronized {schema_name}.{table_name}")
+                                            group_database_synchronization.is_applied = True
+                                            group_database_synchronization.save()
                                     except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                         logging.error(f"Error executing merge query \n{merge_query}. \nException: {str(e)}")
                                         logging.error(f"The temporary tables that have been created are: {temporary_tables_created}")
                                         flag = False
                                         successful_flag = False
+                                        connection.rollback()
 
                                     except (pyodbc.IntegrityError, psycopg.IntegrityError) as e:
                                         logging.error(f"Error executing merge query\n {merge_query}. \n Exception: {str(e)}")
@@ -461,6 +469,7 @@ def synchronize_group_database(group_database: models.GroupDatabase, use_primary
                                     print(f"Query to insert into the temp table: {insert_into_temporary_table_query}")
                                     flag = False
                                     successful_flag = False
+                                    connection.rollback()
 
                             except (pyodbc.ProgrammingError, psycopg.ProgrammingError) as e:
                                 logging.error(f"Error creating the temporary table {temporary_table_actual_name}. Error: {str(e)}.\nQuery: {create_temporary_table_query}")

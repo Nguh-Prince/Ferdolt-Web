@@ -363,21 +363,24 @@ def file_manager(request):
 
 @login_required
 def servers(request, id: str=None):
+    servers = ferdolt_models.Server.objects.all()
     if not id:
-        servers = ferdolt_models.Server.objects.all()
         server_requests = ferdolt_models.CreateServerRequest.objects.all()
 
-        return render(request, "frontend/servers.html", context={'servers': servers, 'server_requests': server_requests})
+        return render(request, "frontend/servers.html", context={
+            'servers': servers, 'server_requests': server_requests, 
+            'default_server': servers.get(name="default")
+        })
     
     else:
-        query = ferdolt_models.Server.objects.filter(server_id=id)
+        query = servers.filter(server_id=id)
 
         if not query.exists():
             return redirect("frontend:not_found")
         
         server = query.first()
 
-        return render(request, "frontend/servers.html", context={'server': server})
+        return render(request, "frontend/servers.html", context={'server': server, 'default_server': servers.get(name="default")})
 
 @login_required
 def groups(request, id: int=None):

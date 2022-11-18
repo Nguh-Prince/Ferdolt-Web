@@ -27,7 +27,7 @@ from rest_framework.response import Response
 from common.permissions import IsStaff
 from common.responses import get_error_response
 
-from common.viewsets import MultipleSerializerViewSet
+from common.viewsets import MultiplePermissionViewSet, MultipleSerializerViewSet
 from core.functions import custom_converter, get_create_temporary_table_query, get_database_connection, get_dbms_booleans, get_temporary_table_name, synchronize_database
 from ferdolt_web import settings
 
@@ -55,7 +55,8 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         'retrieve': serializers.GroupDetailSerializer,
         'synchronization_group': serializers.SynchronizationGroupSerializer,
         'add_database': serializers.AddDatabaseToGroupSerializer,
-        'server_pending_synchronizations': serializers.ServerPendingSynchronizationsSerializer
+        'server_pending_synchronizations': serializers.ServerPendingSynchronizationsSerializer,
+        'delete_grouptables': serializers.RemoveGroupTablesSerializer
     }
 
     def get_queryset(self):
@@ -632,6 +633,21 @@ class GroupViewSet(viewsets.ModelViewSet, MultipleSerializerViewSet):
         return Response(
             data=serializers.GroupDatabaseSerializer(group_database).data
         )
+
+    @action(
+        methods=["DELETE"],
+        detail=True
+    )
+    def delete_grouptables(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        validated_data = serializer.validated_data
+
+        for table in validated_data["tables"]:
+            table.delete()
+
+        return Response( data={'messages': _("Successfully deleted group tables")} )
 
     @action(
         methods=["GET"],

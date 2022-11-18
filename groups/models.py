@@ -257,7 +257,7 @@ class GroupColumnConstraint(models.Model):
 
 EXTRACTION_CODE_MAX_LENGTH = 10
 class GroupExtraction(models.Model):
-    extraction = models.ForeignKey(Extraction, on_delete=models.CASCADE)
+    extraction = models.OneToOneField(Extraction, on_delete=models.CASCADE)
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
     source_database = models.ForeignKey(GroupDatabase, on_delete=models.SET_NULL, null=True)
     source_server = models.ForeignKey(GroupServer, on_delete=models.SET_NULL, null=True)
